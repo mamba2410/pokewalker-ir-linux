@@ -1,91 +1,106 @@
 #include <stdio.h>
 #include <stdint.h>
-#include <pw-ir-linux.h>
-
 #include <string.h>
+#include <stdlib.h>
 
-#include <fcntl.h>
-#include <errno.h>
-#include <termios.h>
-#include <unistd.h>
+#include "pw-ir-linux.h"
+#include "pw_ir.h"
+#include "driver_ir.h"
+
+static const uint8_t rom_dump_exploit_upload_to_0xF956[] = {
+	0x56,                       //upload address low byte
+	0x5E, 0x00, 0xBA, 0x42,     //jsr     common_prologue
+	0x19, 0x55,                 //sub.w   r5, r5
+//lbl_big_loop:
+	0x79, 0x06, 0xf8, 0xd6,     //mov.w   0xf8d6, r6
+	0xfc, 0x80,                 //mov.b   0x80, r4l
+	0x7b, 0x5c, 0x59, 0x8f,     //eemov.b
+	0x79, 0x00, 0xaa, 0x80,     //mov.w   #0xaa80, r0
+	0x5e, 0x00, 0x07, 0x72,     //jsr     sendPacket
+	0x5E, 0x00, 0x25, 0x9E,     //jsr     wdt_pet
+	0x79, 0x25, 0xc0, 0x00,     //cmp.w   r5, #0xc000
+	0x46, 0xe4,                 //bne     $-0x1c		//lbl_big_loop
+	0x79, 0x00, 0x08, 0xd6,     //mov.w   #&irAppMainLoop, r0
+	0x5e, 0x00, 0x69, 0x3a,     //jsr     setProcToCallByMainInLoop
+	0x5a, 0x00, 0xba, 0x62      //jmp     common_epilogue
+};
+const size_t shellcode_size = sizeof(rom_dump_exploit_upload_to_0xF956);
+
+static const uint8_t trigger_uploaded_code_upload_to_0xF7E0[] = {
+	0xe0,                       //upload address low byte
+	0xf9, 0x56                  //pointer to our code to run
+};
+const size_t triggercode_size = sizeof(trigger_uploaded_code_upload_to_0xF7E0);
 
 int main(int argc, char** argv){
 
-    int fd = open("/dev/ttyUSB1", O_RDWR);
+    pw_ir_init();
 
-    while(10)
-        serial_test(fd);
+    for(int i = 0; i < 1; i++) {
+        printf("\n\n");
+        ir_err_t err = pw_ir_listen_for_handshake();
+        printf("Error code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
+        if(err == IR_OK) {
+            pw_ir_clear_rx();
 
-    close(fd);
+            uint8_t *buf = malloc(shellcode_size+8);
+            memcpy(buf+8, rom_dump_exploit_upload_to_0xF956, shellcode_size);
+            buf[0] = 0x06;
+            buf[1] = 0xf9;
+
+            err = pw_ir_send_packet(buf, shellcode_size+8);
+            if(err != IR_OK) printf("Error uploading shellcode: %s\n", PW_IR_ERR_NAMES[err]);
+            //if(err != IR_OK) continue; // mem leaks
+
+            err = pw_ir_recv_packet(buf, 128+8);
+
+            memcpy(buf+8, trigger_uploaded_code_upload_to_0xF7E0, triggercode_size);
+            buf[0] = 0x06;
+            buf[1] = 0xf7;
+
+            err = pw_ir_send_packet(buf, triggercode_size+8);
+            if(err != IR_OK) printf("Error uploading shellcode: %s\n", PW_IR_ERR_NAMES[err]);
+            err = pw_ir_recv_packet(buf, 128+8);
+
+
+            FILE *fp = fopen("./rom.bin", "wb");
+            if(!fp) break;;
+
+            uint8_t rom_buf[128];
+
+            for(size_t i = 0; i < 48*1024; i+=0x80) {
+                err = pw_ir_recv_packet(buf, 0x88);
+                if(err != IR_OK) {
+                    printf("Error collecting rom: %s\n", PW_IR_ERR_NAMES[err]);
+                    break;
+                }
+
+                printf("Recv command: 0x%02x\n", buf[0]);
+                memcpy(rom_buf, buf+8, 0x80);
+                fwrite(rom_buf, 1, 0x80, fp);
+            }
+
+            printf("Dump success!\n");
+            fclose(fp);
+            break;
+        }
+    }
+
+
+    pw_ir_deinit();
 
 	return 0;
 }
 
-int serial_test(int fd) {
+int serial_test() {
 
-    //int fd = open("/dev/ttyACM0", O_RDWR);
+    uint8_t buf[256];
+    int n_bytes = pw_ir_read(buf, 256);
 
-    struct termios tty;
-
-    if(tcgetattr(fd, &tty) != 0) {
-        printf("Error %i from tcgetattr: %s\n", errno, strerror(errno));
-        return 1;
+    printf("Read %d bytes: ", n_bytes);
+    for(int i = 0; i < n_bytes; i++) {
+        printf("%02x", buf[i]);
     }
-
-    tty.c_cflag &= ~PARENB; // Clear parity bit, disabling parity (most common)
-    tty.c_cflag &= ~CSTOPB; // Clear stop field, only one stop bit used in communication (most common)
-    tty.c_cflag &= ~CSIZE; // Clear all bits that set the data size
-    tty.c_cflag |= CS8; // 8 bits per byte (most common)
-    //tty.c_cflag &= ~CRTSCTS; // Disable RTS/CTS hardware flow control (most common)
-    tty.c_cflag |= CREAD | CLOCAL; // Turn on READ & ignore ctrl lines (CLOCAL = 1)
-
-    tty.c_lflag &= ~ICANON;
-    tty.c_lflag &= ~ECHO; // Disable echo
-    tty.c_lflag &= ~ECHOE; // Disable erasure
-    tty.c_lflag &= ~ECHONL; // Disable new-line echo
-    tty.c_lflag &= ~ISIG; // Disable interpretation of INTR, QUIT and SUSP
-    tty.c_iflag &= ~(IXON | IXOFF | IXANY); // Turn off s/w flow ctrl
-    tty.c_iflag &= ~(IGNBRK|BRKINT|PARMRK|ISTRIP|INLCR|IGNCR|ICRNL); // Disable any special handling of received bytes
-
-    tty.c_oflag &= ~OPOST; // Prevent special interpretation of output bytes (e.g. newline chars)
-    tty.c_oflag &= ~ONLCR; // Prevent conversion of newline to carriage return/line feed
-    // tty.c_oflag &= ~OXTABS; // Prevent conversion of tabs to spaces (NOT PRESENT ON LINUX)
-    // tty.c_oflag &= ~ONOEOT; // Prevent removal of C-d chars (0x004) in output (NOT PRESENT ON LINUX)
-
-    tty.c_cc[VTIME] = 10;    // Wait for up to 1s (10 deciseconds), returning as soon as any data is received.
-    tty.c_cc[VMIN] = 0;
-
-    cfsetispeed(&tty, B115200);
-    cfsetospeed(&tty, B115200);
-
-    if (tcsetattr(fd, TCSANOW, &tty) != 0) {
-      printf("Error %i from tcsetattr: %s\n", errno, strerror(errno));
-      return 1;
-    }
-
-    char msg[] = "Hello";
-    write(fd, msg, sizeof(msg));
-
-    char read_buf[256];
-    memset(read_buf, 0, 256);
-
-    int bytes_available;
-
-    //do {
-    //    ioctl(fd, FIONREAD, &bytes_available);
-    //} while(bytes_available>0);
-
-
-    int num_bytes = read(fd, read_buf, 64);
-
-    if (num_bytes < 0) {
-        printf("Error reading: %s", strerror(errno));
-        return 1;
-    }
-
-    printf("Read %i bytes. Received message: ", num_bytes);
-    for(int i = 0; i < num_bytes; i++)
-        printf("%02x", read_buf[i]^0xAA);
     printf("\n");
 
     return 0;
