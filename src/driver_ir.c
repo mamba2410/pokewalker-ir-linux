@@ -12,18 +12,36 @@
 static int ir_fd;
 
 int pw_ir_read(uint8_t *buf, size_t max_len) {
-    /*
-    int n_bytes;
-    do {
-        ioctl(ir_fd, FIONREAD, &n_bytes);
-    } while(n_bytes < max_len);
 
-    return read(ir_fd, buf, max_len);
+    int total_read=0, bytes_read, bytes_available, bytes_left;
+
+    do {
+        ioctl(ir_fd, FIONREAD, &bytes_available);
+    } while(bytes_available < max_len);
+
+    //printf("\t%02x bytes available\n", bytes_available);
+    total_read = read(ir_fd, buf, max_len);
+
+    /*
+    do {
+        bytes_left = max_len - total_read;
+        ioctl(ir_fd, FIONREAD, &bytes_available);
+        if(bytes_available>0) {
+            bytes_read = read(ir_fd, buf+total_read, bytes_left);
+            total_read += bytes_read;
+        }
+    } while(bytes_available < max_len);
     */
-    return read(ir_fd, buf, max_len);
+
+
+    return total_read;
 }
 
 int pw_ir_write(uint8_t *buf, size_t len) {
+    printf("\twrite: ");
+    for(size_t i = 0; i < len; i++)
+        printf("%02x", buf[i]^0xaa);
+    printf("\n");
     return write(ir_fd, buf, len);
 }
 

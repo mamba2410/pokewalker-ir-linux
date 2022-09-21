@@ -6,7 +6,7 @@
 #include "pw_ir.h"
 
 static ir_state_t current_state = IR_STATE_IDLE;
-static uint8_t session_id[4] = {5, 5, 5, 5};
+static uint8_t session_id[4] = {0xde, 0xad, 0xbe, 0xef};
 
 static uint8_t rx_buf[PW_RX_BUF_LEN];
 static uint8_t tx_buf[PW_TX_BUF_LEN];
@@ -38,8 +38,10 @@ ir_err_t pw_ir_send_packet(uint8_t *packet, size_t len) {
 
     uint16_t chk = pw_ir_checksum(packet, len);
 
-    packet[0x02] = (uint8_t)(chk>>8);
-    packet[0x03] = (uint8_t)(chk&0xff);
+    // Packet checksum little-endian
+    packet[0x02] = (uint8_t)(chk&0xff);
+    packet[0x03] = (uint8_t)(chk>>8);
+
 
 
     for(size_t i = 0; i < len; i++)
@@ -76,11 +78,23 @@ ir_err_t pw_ir_recv_packet(uint8_t *packet, size_t len) {
     for(size_t i = 0; i < len; i++)
         packet[i] = rx_buf_aa[i] ^ 0xaa;
 
-    uint16_t chk = pw_ir_checksum(packet, len);
-    uint16_t packet_chk = (uint16_t)packet[2]<<8 | (uint16_t)packet[3];
+    // packet chk LE
+    uint16_t packet_chk = (((uint16_t)packet[3])<<8) + ((uint16_t)packet[2]);
 
-    if(packet_chk != chk)
+    // zero packet checksum before we calc it ourselves
+    uint8_t p0x02, p0x03;
+    p0x02 = packet[2];
+    p0x03 = packet[3];
+    packet[2] = 0;
+    packet[3] = 0;
+    uint16_t chk = pw_ir_checksum(packet, len);
+    packet[2] = p0x02;
+    packet[3] = p0x03;
+
+    if(packet_chk != chk && n_read>1) {
+        //printf("Error: bad checksum on read: chk %04x; pkt %04x; pkt(xor) %04x\n", chk, packet_chk, packet_chk^0xaaaa);
         return IR_ERR_BAD_CHECKSUM;
+    }
 
     bool session_id_ok = true;
     for(size_t i = i; (i < 4)&&session_id_ok; i++)
@@ -93,11 +107,11 @@ ir_err_t pw_ir_recv_packet(uint8_t *packet, size_t len) {
 }
 
 
-uint16_t pw_ir_checksum(uint8_t *packet, size_t len) {
-    uint16_t crc = 0x0002;
-
+uint16_t pw_ir_checksum_seeded(uint8_t *data, size_t len, uint16_t seed) {
+    // Dmitry's palm
+    uint32_t crc = seed;
     for(size_t i = 0; i < len; i++) {
-        uint16_t v = packet[i];
+        uint16_t v = data[i];
 
         if(!(i&1)) v <<= 8;
 
@@ -105,6 +119,18 @@ uint16_t pw_ir_checksum(uint8_t *packet, size_t len) {
     }
 
     while(crc>>16) crc = (uint16_t)crc + (crc>>16);
+
+    return crc;
+}
+
+uint16_t pw_ir_checksum(uint8_t *packet, size_t len) {
+
+    uint16_t crc;
+
+    crc = pw_ir_checksum_seeded(packet, 8, 0x0002);
+    if(len>8) {
+        crc = pw_ir_checksum_seeded(packet+8, len-8, crc);
+    }
 
     return crc;
 }
@@ -122,7 +148,7 @@ ir_err_t pw_ir_listen_for_handshake() {
         return err;
     }
 
-    printf("Received response: 0x%02x\n", rx[0]);
+    //printf("Received response: 0x%02x\n", rx[0]);
     if(rx[0] != 0xfc)
         return IR_ERR_UNEXPECTED_PACKET;
 
@@ -138,11 +164,21 @@ ir_err_t pw_ir_listen_for_handshake() {
     if(err != IR_OK) return err;
     printf("Sent response packet\n");
 
-    pw_ir_flush_rx();
-    err = pw_ir_recv_packet(rx, 8);
+    usleep(5000);
+    size_t i = 0;
+    do {
+        err = pw_ir_recv_packet(rx, 8);
+        printf("%d ", i);
+        i++;
+    } while(rx[0] == 0xfc && i<10);
+
+    usleep(5000);
+
+
+    //if(err != IR_OK && err != IR_ERR_BAD_CHECKSUM) {
     if(err != IR_OK) {
+        printf("Error recv packet: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
         printf("Packet header: ");
-        //for(size_t i = 0; i < 8; i++) {
         for(size_t i = 0; i < 8; i++) {
             printf("0x%02x ", rx[i]);
         }
@@ -151,16 +187,17 @@ ir_err_t pw_ir_listen_for_handshake() {
         return err;
     }
 
+
     if(rx[0] == 0xfa) {
-        printf("Got to resp\n");
-    } else if(tx[0] != 0xf8) {
-        printf("Got resp: %02x\n", tx[0]);
+        printf("Remote requested master\n");
+    } else if(rx[0] != 0xf8) {
+        printf("Error: got resp: %02x\n", tx[0]);
         return IR_ERR_UNEXPECTED_PACKET;
     }
 
     printf("Keyex successful!\nsession_id: ");
     for(size_t i = 0; i < 4; i++) {
-        session_id[i] = tx[4+i];
+        session_id[i] ^= rx[4+i];
         printf("%02x", session_id[i]);
     }
     printf("\n");

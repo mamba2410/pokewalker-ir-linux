@@ -35,6 +35,7 @@ extern const char* const PW_IR_ERR_NAMES[];
 ir_err_t pw_ir_send_packet(uint8_t *packet, size_t len);
 ir_err_t pw_ir_recv_packet(uint8_t *packet, size_t len);
 ir_err_t pw_ir_listen_for_handshake();
+uint16_t pw_ir_checksum_seeded(uint8_t *packet, size_t len, uint16_t seed);
 uint16_t pw_ir_checksum(uint8_t *packet, size_t len);
 
 #endif /* PW_IR_H */
