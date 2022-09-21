@@ -6,3 +6,5 @@ tags
 *.ino
 *.cpp
 *.bin
+*.hex
+*.s
