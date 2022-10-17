@@ -86,10 +86,18 @@ int pw_ir_init() {
     // tty.c_oflag &= ~OXTABS; // Prevent conversion of tabs to spaces (NOT PRESENT ON LINUX)
     // tty.c_oflag &= ~ONOEOT; // Prevent removal of C-d chars (0x004) in output (NOT PRESENT ON LINUX)
 
-    // reads break 1 deci-second after first byte, or after 255 characters, whichever comes first
+    // see http://unixwiz.net/techtips/termios-vmin-vtime.html
     // for reference, 136 bytes @115200 baud takes ~10ms, 100ms since first read is more than enough
-    tty.c_cc[VTIME] = 1;
-    tty.c_cc[VMIN] = 255;
+
+    // ~~reads break 1 deci-second after first byte, or after 255 characters, whichever comes first~~
+    //tty.c_cc[VTIME] = 1;    // max time between bytes = 100ms
+    //tty.c_cc[VMIN] = 255;   // min number of bytes per read is 255
+
+    // i.e. timeout 200ms after start of read
+    // NOTE: behaviour needs testing, I don't know if it will break after the first byte or if it will
+    // break if the timer runs out while there is still data incoming
+    tty.c_cc[VTIME] = 2;    // max time between bytes = 200ms
+    tty.c_cc[VMIN] = 0;     // min number of bytes per read is 0
 
     cfsetispeed(&tty, B115200);
     cfsetospeed(&tty, B115200);
