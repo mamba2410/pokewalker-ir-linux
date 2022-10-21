@@ -100,15 +100,21 @@ typedef enum {
 
 
 extern const char* const PW_IR_ERR_NAMES[];
+extern uint8_t g_advertising_attempts;
+extern uint8_t session_id[];
+extern uint8_t tx_buf[];
+extern uint8_t rx_buf[];
 
 ir_err_t pw_ir_send_packet(uint8_t *packet, size_t len, size_t *n_read);
 ir_err_t pw_ir_recv_packet(uint8_t *packet, size_t len, size_t *n_write);
+ir_err_t pw_ir_send_advertising_packet();
 
-ir_err_t pw_ir_listen_for_handshake();
 uint16_t pw_ir_checksum_seeded(uint8_t *packet, size_t len, uint16_t seed);
 uint16_t pw_ir_checksum(uint8_t *packet, size_t len);
+
 void pw_ir_set_connect_status(connect_status_t s);
 connect_status_t pw_ir_get_connect_status();
+
 
 
 #endif /* PW_IR_H */

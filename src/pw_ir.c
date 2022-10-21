@@ -5,15 +5,15 @@
 #include "driver_ir.h"
 #include "pw_ir.h"
 
-static ir_state_t current_state = IR_STATE_IDLE;
-static uint8_t session_id[4] = {0xde, 0xad, 0xbe, 0xef};
 static connect_status_t g_connect_status = CONNECT_STATUS_DISCONNECTED;
+uint8_t g_advertising_attempts = 0;
 
+uint8_t session_id[4] = {0xde, 0xad, 0xbe, 0xef};
 
-static uint8_t rx_buf[PW_RX_BUF_LEN];
-static uint8_t tx_buf[PW_TX_BUF_LEN];
-static uint8_t tx_buf_aa[PW_TX_BUF_LEN];
-static uint8_t rx_buf_aa[PW_RX_BUF_LEN];
+uint8_t tx_buf[PW_TX_BUF_LEN];
+uint8_t rx_buf[PW_RX_BUF_LEN];
+uint8_t tx_buf_aa[PW_TX_BUF_LEN];
+uint8_t rx_buf_aa[PW_RX_BUF_LEN];
 
 const char* const PW_IR_ERR_NAMES[] = {
     [IR_OK] = "ok",
@@ -95,7 +95,7 @@ ir_err_t pw_ir_recv_packet(uint8_t *packet, size_t len, size_t *n_read) {
     packet[2] = p0x02;
     packet[3] = p0x03;
 
-    if(packet_chk != chk && n_read>1) {
+    if(packet_chk != chk && *n_read>1) {
         //printf("Error: bad checksum on read: chk %04x; pkt %04x; pkt(xor) %04x\n", chk, packet_chk, packet_chk^0xaaaa);
         return IR_ERR_BAD_CHECKSUM;
     }
@@ -141,9 +141,7 @@ uint16_t pw_ir_checksum(uint8_t *packet, size_t len) {
 
 
 /*
- *  TODO: Advertise in this function as well
- *  TODO: Handle if remote asserts master
- */
+ * TODO: Remove: superceded by event loop
 ir_err_t pw_ir_listen_for_handshake() {
     uint8_t *tx = tx_buf;
     uint8_t *rx = rx_buf;
@@ -217,6 +215,7 @@ ir_err_t pw_ir_listen_for_handshake() {
 
     return IR_OK;
 }
+ */
 
 void pw_ir_set_connect_status(connect_status_t s) {
     g_connect_status = s;
@@ -224,6 +223,18 @@ void pw_ir_set_connect_status(connect_status_t s) {
 
 connect_status_t pw_ir_get_connect_status() {
     return g_connect_status;
+}
+
+ir_err_t pw_ir_send_advertising_packet() {
+
+    uint8_t advertising_buf[] = {CMD_ADVERTISING^0xaa};
+
+    int n = pw_ir_write(advertising_buf, 1);
+    if(n <= 0) {
+        return IR_ERR_BAD_SEND;
+    }
+
+    return IR_OK;
 }
 
 

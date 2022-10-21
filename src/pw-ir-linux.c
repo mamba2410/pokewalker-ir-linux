@@ -96,6 +96,7 @@ int main(int argc, char** argv){
 ir_err_t dump_64k_rom() {
     ir_err_t err;
     uint8_t rom_buf[0x88];
+    size_t n_read = 0;
 
     FILE *fp = fopen("./eeprom.bin", "wb");
     if(!fp) {
@@ -119,14 +120,14 @@ ir_err_t dump_64k_rom() {
         packet[9] = (uint8_t)(i&0xff);
         packet[10] = (uint8_t)read_len;
 
-        err = pw_ir_send_packet(packet, 11);
+        err = pw_ir_send_packet(packet, 11, &n_read);
         if(err != IR_OK) {
             printf("Error code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
             break;
         }
 
         // hacky way to get around 64-byte rx buffer
-        err = pw_ir_recv_packet(rom_buf, read_len+8);
+        err = pw_ir_recv_packet(rom_buf, read_len+8, &n_read);
 
         // Responses are VALID packets
         if(err != IR_OK) {
@@ -147,17 +148,18 @@ ir_err_t dump_64k_rom() {
 ir_err_t dump_48k_rom() {
     ir_err_t err;
     uint8_t *buf = malloc(shellcode_size+8);
+    size_t n_read = 0;
 
     memcpy(buf+8, rom_dump_exploit_upload_to_0xF956, shellcode_size);
     buf[0] = 0x06;
     buf[1] = 0xf9;
 
-    err = pw_ir_send_packet(buf, shellcode_size+8);
+    err = pw_ir_send_packet(buf, shellcode_size+8, &n_read);
     if(err != IR_OK) printf("Error uploading shellcode: %s\n", PW_IR_ERR_NAMES[err]);
 
     printf("Sent shellcode\n");
     usleep(1000);
-    err = pw_ir_recv_packet(buf, 8);
+    err = pw_ir_recv_packet(buf, 8, &n_read);
     if(err != IR_OK) printf("Error in shellcode ack: %s\n", PW_IR_ERR_NAMES[err]);
 
     printf("Recv shellcode ack\n");
@@ -167,12 +169,12 @@ ir_err_t dump_48k_rom() {
     buf[1] = 0xf7;
 
     usleep(1000);
-    err = pw_ir_send_packet(buf, triggercode_size+8);
+    err = pw_ir_send_packet(buf, triggercode_size+8, &n_read);
     if(err != IR_OK) printf("Error uploading shellcode: %s\n", PW_IR_ERR_NAMES[err]);
     printf("Sent trigger code\n");
 
 
-    err = pw_ir_recv_packet(buf, 8);
+    err = pw_ir_recv_packet(buf, 8, &n_read);
     if(err != IR_OK) printf("Error in triggercode ack: %s\n", PW_IR_ERR_NAMES[err]);
     printf("Recv trigger ack\n");
 
@@ -192,9 +194,9 @@ ir_err_t dump_48k_rom() {
         printf("Reading address: %04x\n", i);
 
         // hacky way to get around 64-byte rx buffer
-        err = pw_ir_recv_packet(rom_buf, 8);
-        err = pw_ir_recv_packet(rom_buf+8, 0x40);
-        err = pw_ir_recv_packet(rom_buf+0x48, 0x40);
+        err = pw_ir_recv_packet(rom_buf, 8, &n_read);
+        err = pw_ir_recv_packet(rom_buf+8, 0x40, &n_read);
+        err = pw_ir_recv_packet(rom_buf+0x48, 0x40, &n_read);
 
         // if you can read that many in one go
         //err = pw_ir_recv_packet(rom_buf, 0x88);
