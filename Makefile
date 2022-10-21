@@ -3,7 +3,7 @@
 ###########################################################################################################
 CC = gcc
 LD = gcc
-GLOBAL_CC_FLAGS =
+GLOBAL_CC_FLAGS = -g
 GLOBAL_LD_FLAGS =
 LIB_D = ./build/deps
 
@@ -29,7 +29,7 @@ MAIN_INC		= $(wildcard $(MAIN_INC_D)/*.h)
 MAIN_C_OBJ		= $(patsubst $(MAIN_SRC_D)/%.c, $(MAIN_OBJ_D)/%_c.o, $(MAIN_C_SRC))
 
 $(MAIN_OBJ_D)/%_c.o:	$(MAIN_SRC_D)/%.c
-	$(CC) $(MAIN_CC_FLAGS) -I'$(MAIN_INC_D)' -c $< -o $@ 
+	$(CC) $(MAIN_CC_FLAGS) -I'$(MAIN_INC_D)' -c $< -o $@
 
 main: $(MAIN_C_OBJ) $(MAIN_INC) # Add any libraries here
 	$(LD) $(MAIN_C_OBJ) $(MAIN_LD_FLAGS) -o $(MAIN_BIN)
@@ -45,7 +45,7 @@ build: main build_number
 
 # Recipe for running, just builds and executes the binary
 run: build
-	@echo ""	
+	@echo ""
 	@./$(MAIN_BIN)
 
 # Recipe for cleaning. Removes all objects and binaries
