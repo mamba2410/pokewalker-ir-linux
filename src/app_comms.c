@@ -2,6 +2,9 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+#include <stdio.h>
+
+#include "driver_ir.h"
 #include "pw_ir.h"
 #include "app_comms.h"
 
@@ -24,10 +27,9 @@ void pw_comms_event_loop() {
 
     connect_status_t cs = pw_ir_get_connect_status();
     if(cs == CONNECT_STATUS_DISCONNECTED) return;
+
     ir_err_t err = IR_ERR_GENERAL;
     size_t n_read;
-
-
 
     switch(cs) {
         case CONNECT_STATUS_AWAITING: {
@@ -59,7 +61,7 @@ void pw_comms_event_loop() {
 }
 
 ir_err_t pw_ir_advertise_and_listen(uint8_t *rx, size_t *n_read) {
-    uint8_t advertising_buf[] = {CMD_ADVERTISING};
+    uint8_t advertising_buf[] = {CMD_ADVERTISING^0xaa};
 
     int n = pw_ir_write(advertising_buf, 1);
     if(n <= 0) {
@@ -73,7 +75,63 @@ ir_err_t pw_ir_advertise_and_listen(uint8_t *rx, size_t *n_read) {
 
     ir_err_t err = pw_ir_recv_packet(rx, 8, n_read);
 
+    return err;
+}
 
+ir_err_t pw_comms_try_connect_loop() {
+    ir_err_t err;
+    size_t n_read = 0;
+
+    switch(g_comm_substate) {
+        case 1: {   // substate listen and advertise
+            err = pw_ir_advertise_and_listen(app_comms_buf, &n_read);
+            switch(err) {
+                case IR_ERR_SIZE_MISMATCH:
+                case IR_OK:
+                    // we got a valid packet back, now check if master or slave
+                    // set substate to master/slave check
+                    g_comm_substate = 2;
+                    printf("Recv packet during advertisement: first byte: %02x; size: %lu\n", app_comms_buf[0], n_read);
+                    break;
+                case IR_ERR_TIMEOUT:
+                    // TODO: ignore
+                    break;
+                case IR_ERR_ADVERTISING_MAX:
+                    // TODO: cannot connect
+                    break;
+                default:
+                    // TODO: Handle error messages and quitting
+                    pw_ir_set_connect_status(CONNECT_STATUS_DISCONNECTED);
+                    break;
+            }
+
+        }
+        case 2: {   // have peer, determine master/slave
+            switch(app_comms_buf[0]) {
+                case CMD_ADVERTISING: // we found peer, we request master
+                    // send CMD_ASSERT_MASTER
+                    g_comm_substate = 3;
+                    break;
+                case CMD_ASSERT_MASTER: // peer found us, peer requests master
+                    // generate sessid
+                    // send CMD_SLAVE_ACK
+                    // set state to CONNECT_STATUS_SLAVE
+                    break;
+                default:
+                    return IR_ERR_UNEXPECTED_PACKET;
+            }
+
+            break;
+        }
+        case 3: {   // we have sent master
+            // expect CMD_SLAVE_ACK
+            // combine keys
+            // set state to CONNECT_STATUS_MASTER
+            break;
+        }
+
+    }
+    return IR_OK;
 }
 
 int pw_comms_slave_perform_action(uint8_t *packet, size_t len) {

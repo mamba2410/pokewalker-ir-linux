@@ -65,6 +65,10 @@ ir_err_t pw_ir_recv_packet(uint8_t *packet, size_t len, size_t *n_read) {
 
     *n_read = (size_t)pw_ir_read(rx_buf_aa, len);
 
+    if(*n_read <= 0) {
+        return IR_ERR_TIMEOUT;
+    }
+
     if(*n_read != len) {
         printf("read %lu; expected %lu\n", *n_read, len);
         printf("Packet header: ");
@@ -73,7 +77,6 @@ ir_err_t pw_ir_recv_packet(uint8_t *packet, size_t len, size_t *n_read) {
         }
         printf("\n");
         return IR_ERR_SIZE_MISMATCH;
-
     }
 
     for(size_t i = 0; i < len; i++)
@@ -145,8 +148,9 @@ ir_err_t pw_ir_listen_for_handshake() {
     uint8_t *tx = tx_buf;
     uint8_t *rx = rx_buf;
     ir_err_t err;
+    size_t n_read = 0;
 
-    err = pw_ir_recv_packet(rx, 1);
+    err = pw_ir_recv_packet(rx, 1, &n_read);
     usleep(5*1000);
 
     if(err != IR_OK && err != IR_ERR_BAD_SESSID && err != IR_ERR_BAD_CHECKSUM) {
@@ -165,14 +169,14 @@ ir_err_t pw_ir_listen_for_handshake() {
         tx[4+i] = session_id[i];
     }
 
-    err = pw_ir_send_packet(tx, 8);
+    err = pw_ir_send_packet(tx, 8, &n_read);
     if(err != IR_OK) return err;
     printf("Sent response packet\n");
 
     usleep(5000);
     size_t i = 0;
     do {
-        err = pw_ir_recv_packet(rx, 8);
+        err = pw_ir_recv_packet(rx, 8, &n_read);
         printf("%d ", i);
         i++;
     } while(rx[0] == 0xfc && i<10); // debug to clear rxbuf
