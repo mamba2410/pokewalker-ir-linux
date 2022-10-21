@@ -6,6 +6,10 @@
 #include "pw-ir-linux.h"
 #include "pw_ir.h"
 #include "driver_ir.h"
+#include "app_comms.h"
+
+
+ir_err_t dump_64k_rom();
 
 /*
  *  Shell code taken from Dmitry GR
@@ -35,105 +39,184 @@ static const uint8_t trigger_uploaded_code_upload_to_0xF7E0[] = {
 };
 const size_t triggercode_size = sizeof(trigger_uploaded_code_upload_to_0xF7E0);
 
+void print_packet(uint8_t *buf, size_t len) {
+    size_t i;
+    for(i = 0; i < 8; i++) {
+        printf("%02x", buf[i]);
+    }
+    printf(" ");
+    for(; i < len; i++) {
+        printf("%02x", buf[i]);
+    }
+    printf("\n");
+}
+
 int main(int argc, char** argv){
 
-    pw_ir_init();
+    //pw_ir_init();
+    ir_err_t err;
 
-    for(int i = 0; i < 1; i++) {
-        printf("\n\n");
-        ir_err_t err = pw_ir_listen_for_handshake();
-        printf("Error code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
+    uint8_t buf[8];
+    memset(buf, 0, 8);
 
-        // If we did handshake, try dump 48k rom
-        if(err == IR_OK) {
-            pw_ir_clear_rx();
-
-            uint8_t *buf = malloc(shellcode_size+8);
-            memcpy(buf+8, rom_dump_exploit_upload_to_0xF956, shellcode_size);
-            buf[0] = 0x06;
-            buf[1] = 0xf9;
-
-            err = pw_ir_send_packet(buf, shellcode_size+8);
-            if(err != IR_OK) printf("Error uploading shellcode: %s\n", PW_IR_ERR_NAMES[err]);
-
-            printf("Sent shellcode\n");
-            usleep(1000);
-            err = pw_ir_recv_packet(buf, 8);
-            if(err != IR_OK) printf("Error in shellcode ack: %s\n", PW_IR_ERR_NAMES[err]);
-
-            printf("Recv shellcode ack\n");
-
-            memcpy(buf+8, trigger_uploaded_code_upload_to_0xF7E0, triggercode_size);
-            buf[0] = 0x06;
-            buf[1] = 0xf7;
-
-            usleep(1000);
-            err = pw_ir_send_packet(buf, triggercode_size+8);
-            if(err != IR_OK) printf("Error uploading shellcode: %s\n", PW_IR_ERR_NAMES[err]);
-            printf("Sent trigger code\n");
+    /*
+    err = pw_ir_recv_packet(buf, 8);
+    print_packet(buf, 8);
 
 
-            err = pw_ir_recv_packet(buf, 8);
-            if(err != IR_OK) printf("Error in triggercode ack: %s\n", PW_IR_ERR_NAMES[err]);
-            printf("Recv trigger ack\n");
+    buf[0] = 0xfc^0xaa;
+    //pw_ir_send_packet(buf, 1);
+    //err = pw_ir_write(buf, 1);
 
-            FILE *fp = fopen("./rom.bin", "wb");
-            if(!fp) {
-                printf("Error: can't open file\n");
-                break;
-            }
+    usleep(5000);
 
-            uint8_t rom_buf[0x88];
+    err = pw_ir_recv_packet(buf, 8);
+    print_packet(buf, 8);
+    */
 
-            size_t step = 0x80;
-            size_t read_size = 0xc000;
-            //size_t read_size = 64*1024;
-            for(size_t i = 0; i < read_size; i+=step) {
-                //usleep(500);
-                printf("Reading address: %04x\n", i);
+    // Run our comms loop
 
-                // hacky way to get around 64-byte rx buffer
-                err = pw_ir_recv_packet(rom_buf, 8);
-                err = pw_ir_recv_packet(rom_buf+8, 0x40);
-                err = pw_ir_recv_packet(rom_buf+0x48, 0x40);
-
-                // if you can read that many in one go
-                //err = pw_ir_recv_packet(rom_buf, 0x88);
-
-                /*
-                // Responses are invalid packets, do not check error
-                if(err != IR_OK) {
-                    printf("Error code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
-                    break;
-                }
-                */
-
-                fwrite(rom_buf+8, 1, step, fp);
-            }
-
-            printf("Dump success!\n");
-            fclose(fp);
-            break;
-        }
+    while(1) {
+        pw_comms_event_loop();
     }
 
+    return 0;
 
+    // try our action
+    err = dump_64k_rom();
+    if(err != IR_OK)
+        printf("Error code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
+
+    // safely shut down IR
     pw_ir_deinit();
 
 	return 0;
 }
 
-int serial_test() {
+ir_err_t dump_64k_rom() {
+    ir_err_t err;
+    uint8_t rom_buf[0x88];
 
-    uint8_t buf[256];
-    int n_bytes = pw_ir_read(buf, 256);
-
-    printf("Read %d bytes: ", n_bytes);
-    for(int i = 0; i < n_bytes; i++) {
-        printf("%02x", buf[i]);
+    FILE *fp = fopen("./eeprom.bin", "wb");
+    if(!fp) {
+        printf("Error: can't open file\n");
+        return IR_ERR_GENERAL;
     }
-    printf("\n");
 
-    return 0;
+    uint8_t packet[11];
+
+    size_t step = 56; // 64-byte serial buffer :()
+    size_t read_size = 64*1024;
+
+    for(size_t i = 0; i < read_size; i+=step) {
+        printf("Reading address: %04x\n", i);
+        uint8_t read_len = ((read_size-i)>step)?step:read_size-i;
+
+        // TODO: Ask for eeprom read
+        packet[0] = CMD_EEPROM_READ_REQ;
+        packet[1] = EXTRA_BYTE_TO_WALKER;
+        packet[8] = (uint8_t)(i>>8);
+        packet[9] = (uint8_t)(i&0xff);
+        packet[10] = (uint8_t)read_len;
+
+        err = pw_ir_send_packet(packet, 11);
+        if(err != IR_OK) {
+            printf("Error code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
+            break;
+        }
+
+        // hacky way to get around 64-byte rx buffer
+        err = pw_ir_recv_packet(rom_buf, read_len+8);
+
+        // Responses are VALID packets
+        if(err != IR_OK) {
+            printf("Error code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
+            break;
+        }
+
+        fwrite(rom_buf+8, 1, read_len, fp);
+    }
+
+    printf("Dump success!\n");
+    fclose(fp);
+    return IR_OK;
+
 }
 
+
+ir_err_t dump_48k_rom() {
+    ir_err_t err;
+    uint8_t *buf = malloc(shellcode_size+8);
+
+    memcpy(buf+8, rom_dump_exploit_upload_to_0xF956, shellcode_size);
+    buf[0] = 0x06;
+    buf[1] = 0xf9;
+
+    err = pw_ir_send_packet(buf, shellcode_size+8);
+    if(err != IR_OK) printf("Error uploading shellcode: %s\n", PW_IR_ERR_NAMES[err]);
+
+    printf("Sent shellcode\n");
+    usleep(1000);
+    err = pw_ir_recv_packet(buf, 8);
+    if(err != IR_OK) printf("Error in shellcode ack: %s\n", PW_IR_ERR_NAMES[err]);
+
+    printf("Recv shellcode ack\n");
+
+    memcpy(buf+8, trigger_uploaded_code_upload_to_0xF7E0, triggercode_size);
+    buf[0] = 0x06;
+    buf[1] = 0xf7;
+
+    usleep(1000);
+    err = pw_ir_send_packet(buf, triggercode_size+8);
+    if(err != IR_OK) printf("Error uploading shellcode: %s\n", PW_IR_ERR_NAMES[err]);
+    printf("Sent trigger code\n");
+
+
+    err = pw_ir_recv_packet(buf, 8);
+    if(err != IR_OK) printf("Error in triggercode ack: %s\n", PW_IR_ERR_NAMES[err]);
+    printf("Recv trigger ack\n");
+
+    FILE *fp = fopen("./rom.bin", "wb");
+    if(!fp) {
+        printf("Error: can't open file\n");
+        return err;
+    }
+
+    uint8_t rom_buf[0x88];
+
+    size_t step = 0x80;
+    size_t read_size = 0xc000;
+    //size_t read_size = 64*1024;
+    for(size_t i = 0; i < read_size; i+=step) {
+        //usleep(500);
+        printf("Reading address: %04x\n", i);
+
+        // hacky way to get around 64-byte rx buffer
+        err = pw_ir_recv_packet(rom_buf, 8);
+        err = pw_ir_recv_packet(rom_buf+8, 0x40);
+        err = pw_ir_recv_packet(rom_buf+0x48, 0x40);
+
+        // if you can read that many in one go
+        //err = pw_ir_recv_packet(rom_buf, 0x88);
+
+        /*
+        // Responses are invalid packets, do not check error
+        if(err != IR_OK) {
+            printf("Error code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
+            break;
+        }
+        */
+
+        fwrite(rom_buf+8, 1, step, fp);
+    }
+
+    printf("Dump success!\n");
+    fclose(fp);
+    return IR_OK;
+}
+
+
+ir_err_t peer_play() {
+
+    return IR_OK;
+}

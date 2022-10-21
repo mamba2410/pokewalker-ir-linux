@@ -42,7 +42,7 @@
 #define CMD_NORX_ACK            0x9e
 #define CMD_CONNECT_COMPLETE    0x66
 #define CMD_CONNECT_COMPLETE_ACK 0x68
-#define CMD_ADVERTISE           0xfc
+#define CMD_ADVERTISING         0xfc
 #define CMD_DISCONNECT          0xf4
 #define CMD_SLAVE_ACK           0xf8
 #define CMD_ASSERT_MASTER       0xfa
@@ -62,13 +62,19 @@
 #define EXTRA_BYTE_FROM_WALKER  0x01
 #define EXTRA_BYTE_TO_WALKER    0x02
 
+#define MAX_ADVERTISING_PACKETS 20
+
+#define PW_IR_READ_TIMEOUT_MS   200u
+#define PW_IR_READ_TIMEOUT_US   (PW_IR_READ_TIMEOUT_MS*1000)
+#define PW_IR_READ_TIMEOUT_DS   (PW_IR_READ_TIMEOUT_MS/100)
+
 typedef enum {
-    IR_STATE_IDLE,
-    IR_STATE_KEYEX,
-    IR_STATE_READY,
-    IR_STATE_ADVERTISING,
-    IR_STATE_COUNT,
-} ir_state_t;
+    COMM_STATE_IDLE,
+    COMM_STATE_KEYEX,
+    COMM_STATE_READY,
+    COMM_STATE_ADVERTISING,
+    COMM_STATE_COUNT,
+} comm_state_t;
 
 typedef enum {
     IR_OK,
@@ -85,13 +91,25 @@ typedef enum {
     IR_ERR_COUNT,
 } ir_err_t;
 
+typedef enum {
+    CONNECT_STATUS_AWAITING,
+    CONNECT_STATUS_DISCONNECTED,
+    CONNECT_STATUS_MASTER,
+    CONNECT_STATUS_SLAVE,
+} connect_status_t;;
+
+
 extern const char* const PW_IR_ERR_NAMES[];
 
-ir_err_t pw_ir_send_packet(uint8_t *packet, size_t len);
-ir_err_t pw_ir_recv_packet(uint8_t *packet, size_t len);
+ir_err_t pw_ir_send_packet(uint8_t *packet, size_t len, size_t *n_read);
+ir_err_t pw_ir_recv_packet(uint8_t *packet, size_t len, size_t *n_write);
+
 ir_err_t pw_ir_listen_for_handshake();
 uint16_t pw_ir_checksum_seeded(uint8_t *packet, size_t len, uint16_t seed);
 uint16_t pw_ir_checksum(uint8_t *packet, size_t len);
+void pw_ir_set_connect_status(connect_status_t s);
+connect_status_t pw_ir_get_connect_status();
+
 
 #endif /* PW_IR_H */
 

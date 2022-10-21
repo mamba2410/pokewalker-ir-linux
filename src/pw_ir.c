@@ -7,6 +7,8 @@
 
 static ir_state_t current_state = IR_STATE_IDLE;
 static uint8_t session_id[4] = {0xde, 0xad, 0xbe, 0xef};
+static connect_status_t g_connect_status = CONNECT_STATUS_DISCONNECTED;
+
 
 static uint8_t rx_buf[PW_RX_BUF_LEN];
 static uint8_t tx_buf[PW_TX_BUF_LEN];
@@ -28,7 +30,7 @@ const char* const PW_IR_ERR_NAMES[] = {
 };
 
 
-ir_err_t pw_ir_send_packet(uint8_t *packet, size_t len) {
+ir_err_t pw_ir_send_packet(uint8_t *packet, size_t len, size_t *n_write) {
 
     for(uint8_t i = 0; i < 4; i++)
         packet[4+i] = session_id[i];
@@ -47,25 +49,24 @@ ir_err_t pw_ir_send_packet(uint8_t *packet, size_t len) {
     for(size_t i = 0; i < len; i++)
         tx_buf_aa[i] = packet[i] ^ 0xaa;
 
-    int n_written = pw_ir_write(tx_buf_aa, len);
+    *n_write = (size_t)pw_ir_write(tx_buf_aa, len);
 
-    if(n_written != len)
+    if(*n_write != len)
         return IR_ERR_BAD_SEND;
 
     return IR_OK;
 }
 
-ir_err_t pw_ir_recv_packet(uint8_t *packet, size_t len) {
+ir_err_t pw_ir_recv_packet(uint8_t *packet, size_t len, size_t *n_read) {
 
     for(size_t i = 0; i < len; i++) {
         rx_buf_aa[i] = 0;
     }
 
-    int n_read = pw_ir_read(rx_buf_aa, len);
+    *n_read = (size_t)pw_ir_read(rx_buf_aa, len);
 
-    size_t mismatch = (size_t)n_read;
-    if(mismatch != len) {
-        printf("read %d; expected %d\n", n_read, len);
+    if(*n_read != len) {
+        printf("read %lu; expected %lu\n", *n_read, len);
         printf("Packet header: ");
         for(size_t i = 0; i < 8; i++) {
             printf("0x%02x ", packet[i]);
@@ -136,6 +137,10 @@ uint16_t pw_ir_checksum(uint8_t *packet, size_t len) {
 }
 
 
+/*
+ *  TODO: Advertise in this function as well
+ *  TODO: Handle if remote asserts master
+ */
 ir_err_t pw_ir_listen_for_handshake() {
     uint8_t *tx = tx_buf;
     uint8_t *rx = rx_buf;
@@ -149,13 +154,13 @@ ir_err_t pw_ir_listen_for_handshake() {
     }
 
     //printf("Received response: 0x%02x\n", rx[0]);
-    if(rx[0] != 0xfc)
+    if(rx[0] != CMD_ADVERTISING)
         return IR_ERR_UNEXPECTED_PACKET;
 
     printf("Got advert packet\n");
 
-    tx[0] = 0xfa;
-    tx[1] = 0x01;
+    tx[0] = CMD_ASSERT_MASTER;
+    tx[1] = EXTRA_BYTE_FROM_WALKER;
     for(size_t i = 0; i < 4; i++) {
         tx[4+i] = session_id[i];
     }
@@ -170,7 +175,7 @@ ir_err_t pw_ir_listen_for_handshake() {
         err = pw_ir_recv_packet(rx, 8);
         printf("%d ", i);
         i++;
-    } while(rx[0] == 0xfc && i<10);
+    } while(rx[0] == 0xfc && i<10); // debug to clear rxbuf
 
     usleep(5000);
 
@@ -187,13 +192,16 @@ ir_err_t pw_ir_listen_for_handshake() {
         return err;
     }
 
+    if(rx[0] == CMD_ASSERT_MASTER) {
+        printf("Remote is master\n");
+        //TODO: handle this
+    }
 
-    if(rx[0] == 0xfa) {
-        printf("Remote requested master\n");
-    } else if(rx[0] != 0xf8) {
+    if(rx[0] != CMD_SLAVE_ACK) {
         printf("Error: got resp: %02x\n", tx[0]);
         return IR_ERR_UNEXPECTED_PACKET;
     }
+
 
     printf("Keyex successful!\nsession_id: ");
     for(size_t i = 0; i < 4; i++) {
@@ -205,3 +213,13 @@ ir_err_t pw_ir_listen_for_handshake() {
 
     return IR_OK;
 }
+
+void pw_ir_set_connect_status(connect_status_t s) {
+    g_connect_status = s;
+}
+
+connect_status_t pw_ir_get_connect_status() {
+    return g_connect_status;
+}
+
+
