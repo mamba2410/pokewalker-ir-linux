@@ -12,7 +12,6 @@
 static uint8_t g_comm_substate = 0;
 
 void pw_comms_init() {
-
     g_comm_substate = 1;
     g_advertising_attempts = 0;
     pw_ir_set_connect_status(CONNECT_STATUS_AWAITING);
@@ -20,41 +19,42 @@ void pw_comms_init() {
 }
 
 void pw_comms_event_loop() {
-
-    connect_status_t cs = pw_ir_get_connect_status();
-    if(cs == CONNECT_STATUS_DISCONNECTED) return;
-
     ir_err_t err = IR_ERR_GENERAL;
     size_t n_read;
 
+    connect_status_t cs = pw_ir_get_connect_status();
     switch(cs) {
         case CONNECT_STATUS_AWAITING: {
             err = pw_try_connect_loop(rx_buf, PW_TX_BUF_LEN, &g_comm_substate);
             break;
         }
-        case CONNECT_STATUS_SLAVE:
+        case CONNECT_STATUS_SLAVE: {
             printf("We are slave!\n");
+
             // TODO: need to allow non-fixed read lengths
             err = pw_ir_recv_packet(rx_buf, PW_TX_BUF_LEN, &n_read);
-            pw_comms_slave_perform_action(rx_buf, PW_TX_BUF_LEN);
+            if(err == IR_OK || err == IR_ERR_SIZE_MISMATCH) {
+                pw_comms_slave_perform_action(rx_buf, PW_TX_BUF_LEN);
+            }
             break;
-        case CONNECT_STATUS_MASTER:
+        }
+        case CONNECT_STATUS_MASTER: {
             printf("We are master!\n");
             // only thing we can do is ask for peer play
 
             pw_ir_set_connect_status(CONNECT_STATUS_DISCONNECTED);
             break;
-        default:
-            printf("Unknown state: %d\n", cs);
-        case CONNECT_STATUS_DISCONNECTED:
+        }
+        case CONNECT_STATUS_DISCONNECTED: return;
+        default: {
+            pw_ir_die("Error in pw_try_connect_loop");
             break;
+        }
     }
 
     if(err != IR_OK) {
-
-        printf("Error connecting, disconnecting\n");
         printf("\tError code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
-        pw_ir_set_connect_status(CONNECT_STATUS_DISCONNECTED);
+        pw_ir_die("Error during pw_comms_event_loop");
         return;
     }
 

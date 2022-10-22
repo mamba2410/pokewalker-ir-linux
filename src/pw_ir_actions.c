@@ -10,15 +10,13 @@
  */
 ir_err_t pw_ir_advertise_and_listen(uint8_t *rx, size_t *n_read) {
 
-    printf("Attempting to recv advert packet\n");
     ir_err_t err = pw_ir_recv_packet(rx, 8, n_read);
 
     // if we didn't read anything, send an advertising packet
-    //if(*n_read == 0 && err == IR_OK) {
-    if( !(err == IR_OK || err == IR_ERR_SIZE_MISMATCH) ) {
+    //if( !(err == IR_OK || err == IR_ERR_SIZE_MISMATCH) ) {
+    if(*n_read == 0) {
         ir_err_t err2 = pw_ir_send_advertising_packet();
 
-        //printf("Sent advertisement %d\n", g_advertising_attempts);
         g_advertising_attempts++;
         if(g_advertising_attempts > MAX_ADVERTISING_PACKETS) {
             return IR_ERR_ADVERTISING_MAX;
@@ -38,15 +36,13 @@ ir_err_t pw_try_connect_loop(uint8_t *packet, size_t packet_max, uint8_t *substa
     size_t n_read = 0;
 
     switch(*substate) {
-        case 1: {   // substate listen and advertise
+        case IR_SUBSTATE_FINDING_PEER: {   // substate listen and advertise
             err = pw_ir_advertise_and_listen(packet, &n_read);
             switch(err) {
                 case IR_ERR_SIZE_MISMATCH:
                 case IR_OK:
-                    // we got a valid packet back, now check if master or slave
-                    // set substate to master/slave check
-                    *substate = 2;
-                    printf("Recv packet during advertisement: first byte: %02x; size: %lu\n", packet[0], n_read);
+                    // we got a valid packet back, now check if master or slave on next iteration
+                    *substate = IR_SUBSTATE_DETERMINE_ROLE;
                     break;
                 case IR_ERR_TIMEOUT: // ignore timeout
                     break;
@@ -84,7 +80,7 @@ ir_err_t pw_try_connect_loop(uint8_t *packet, size_t packet_max, uint8_t *substa
             }
             break;
         }
-        case 3: {   // we have sent master
+        case IR_SUBSTATE_AWAITING_SLAVE_ACK: {   // we have sent master
 
             // wait for answer
             err = pw_ir_recv_packet(packet, 8, &n_read);
