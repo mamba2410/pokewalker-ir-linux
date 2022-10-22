@@ -15,11 +15,11 @@ typedef enum {
 } comm_substate_t;
 
 
-ir_err_t pw_ir_advertise_and_listen(uint8_t *rx, size_t *pn_read, uint8_t *padvertising_attempts);
-ir_err_t pw_try_connect_loop(uint8_t *packet, size_t packet_max,
+ir_err_t pw_action_listen_and_advertise(uint8_t *rx, size_t *pn_read, uint8_t *padvertising_attempts);
+ir_err_t pw_action_try_find_peer(uint8_t *packet, size_t packet_max,
         comm_substate_t *psubstate, uint8_t *padvertising_attempts);
 ir_err_t pw_action_peer_play(comm_substate_t *psubstate);
-ir_err_t pw_comms_slave_perform_action(uint8_t *packet, size_t len);
+ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len);
 
 
 #endif /* PW_IR_ACTIONS_H */

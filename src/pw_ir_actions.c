@@ -4,7 +4,7 @@
 #include "pw_ir_actions.h"
 
 
-ir_err_t pw_ir_advertise_and_listen(uint8_t *rx, size_t *pn_read, uint8_t *padvertising_attempts) {
+ir_err_t pw_action_listen_and_advertise(uint8_t *rx, size_t *pn_read, uint8_t *padvertising_attempts) {
 
     ir_err_t err = pw_ir_recv_packet(rx, 8, pn_read);
 
@@ -26,7 +26,7 @@ ir_err_t pw_ir_advertise_and_listen(uint8_t *rx, size_t *pn_read, uint8_t *padve
  *  We should be in COMM_STATE_AWAITING
  *  Do one action per call, called in the main event loop
  */
-ir_err_t pw_try_connect_loop(uint8_t *packet, size_t packet_max,
+ir_err_t pw_action_try_find_peer(uint8_t *packet, size_t packet_max,
         comm_substate_t *psubstate, uint8_t *padvertising_attempts) {
 
     ir_err_t err;
@@ -34,7 +34,7 @@ ir_err_t pw_try_connect_loop(uint8_t *packet, size_t packet_max,
 
     switch(*psubstate) {
         case COMM_SUBSTATE_FINDING_PEER: {   // substate listen and advertise
-            err = pw_ir_advertise_and_listen(packet, &n_read, padvertising_attempts);
+            err = pw_action_listen_and_advertise(packet, &n_read, padvertising_attempts);
 
             switch(err) {
                 case IR_ERR_SIZE_MISMATCH:
@@ -105,7 +105,7 @@ ir_err_t pw_try_connect_loop(uint8_t *packet, size_t packet_max,
     return IR_OK;
 }
 
-ir_err_t pw_comms_slave_perform_action(uint8_t *packet, size_t len) {
+ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len) {
 
     switch(packet[0]) {
         default:

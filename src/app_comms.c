@@ -26,7 +26,7 @@ void pw_comms_event_loop() {
     comm_state_t cs = pw_ir_get_comm_state();
     switch(cs) {
         case COMM_STATE_AWAITING: {
-            err = pw_try_connect_loop(rx_buf, PW_TX_BUF_LEN, &g_comm_substate, &g_advertising_attempts);
+            err = pw_action_try_find_peer(rx_buf, PW_TX_BUF_LEN, &g_comm_substate, &g_advertising_attempts);
             break;
         }
         case COMM_STATE_SLAVE: {
@@ -35,7 +35,7 @@ void pw_comms_event_loop() {
             // TODO: need to allow non-fixed read lengths
             err = pw_ir_recv_packet(rx_buf, PW_TX_BUF_LEN, &n_read);
             if(err == IR_OK || err == IR_ERR_SIZE_MISMATCH) {
-                pw_comms_slave_perform_action(rx_buf, PW_TX_BUF_LEN);
+                pw_action_slave_perform_request(rx_buf, PW_TX_BUF_LEN);
             }
             break;
         }
