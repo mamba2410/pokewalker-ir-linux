@@ -55,6 +55,7 @@ int main(int argc, char** argv){
 
     pw_ir_init();
     ir_err_t err;
+    comm_state_t cs;
 
     uint8_t buf[8];
     memset(buf, 0, 8);
@@ -77,17 +78,34 @@ int main(int argc, char** argv){
     pw_comms_init();
 
     // Run our comms loop
-
-    while(1) {
+    do {
         pw_comms_event_loop();
+    } while( (cs=pw_ir_get_comm_state()) == COMM_STATE_AWAITING );
+
+    switch(cs) {
+        case COMM_STATE_MASTER: {
+            printf("Attempting dump.\n");
+
+            // try our action
+            err = dump_64k_rom();
+            if(err != IR_OK)
+                printf("Error code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
+
+            break;
+        }
+        case COMM_STATE_SLAVE: {
+            printf("We ended up as slave, aborting.\n");
+            break;
+        }
+        case COMM_STATE_DISCONNECTED: {
+            printf("Cannot connect to walker.\n");
+            break;
+        }
+        default: {
+            printf("Unknown state, aborting.\n");
+            break;
+        }
     }
-
-    return 0;
-
-    // try our action
-    err = dump_64k_rom();
-    if(err != IR_OK)
-        printf("Error code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
 
     // safely shut down IR
     pw_ir_deinit();
