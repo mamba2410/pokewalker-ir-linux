@@ -69,14 +69,6 @@
 #define PW_IR_READ_TIMEOUT_DS   (PW_IR_READ_TIMEOUT_MS/100)
 
 typedef enum {
-    COMM_STATE_IDLE,
-    COMM_STATE_KEYEX,
-    COMM_STATE_READY,
-    COMM_STATE_ADVERTISING,
-    COMM_STATE_COUNT,
-} comm_state_t;
-
-typedef enum {
     IR_OK,
     IR_ERR_GENERAL,
     IR_ERR_UNEXPECTED_PACKET,
@@ -92,15 +84,14 @@ typedef enum {
 } ir_err_t;
 
 typedef enum {
-    CONNECT_STATUS_AWAITING,
-    CONNECT_STATUS_DISCONNECTED,
-    CONNECT_STATUS_MASTER,
-    CONNECT_STATUS_SLAVE,
-} connect_status_t;;
+    COMM_STATE_AWAITING,
+    COMM_STATE_DISCONNECTED,
+    COMM_STATE_MASTER,
+    COMM_STATE_SLAVE,
+} comm_state_t;
 
 
 extern const char* const PW_IR_ERR_NAMES[];
-extern uint8_t g_advertising_attempts;
 extern uint8_t session_id[];
 extern uint8_t tx_buf[];
 extern uint8_t rx_buf[];
@@ -112,8 +103,8 @@ ir_err_t pw_ir_send_advertising_packet();
 uint16_t pw_ir_checksum_seeded(uint8_t *packet, size_t len, uint16_t seed);
 uint16_t pw_ir_checksum(uint8_t *packet, size_t len);
 
-void pw_ir_set_connect_status(connect_status_t s);
-connect_status_t pw_ir_get_connect_status();
+void pw_ir_set_comm_state(comm_state_t s);
+comm_state_t pw_ir_get_comm_state();
 void pw_ir_die(const char* message);
 
 

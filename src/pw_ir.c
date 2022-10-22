@@ -5,8 +5,7 @@
 #include "driver_ir.h"
 #include "pw_ir.h"
 
-static connect_status_t g_connect_status = CONNECT_STATUS_DISCONNECTED;
-uint8_t g_advertising_attempts = 0;
+static comm_state_t g_comm_state = COMM_STATE_DISCONNECTED;
 
 uint8_t session_id[4] = {0xde, 0xad, 0xbe, 0xef};
 
@@ -119,12 +118,12 @@ uint16_t pw_ir_checksum(uint8_t *packet, size_t len) {
 }
 
 
-void pw_ir_set_connect_status(connect_status_t s) {
-    g_connect_status = s;
+void pw_ir_set_comm_state(comm_state_t s) {
+    g_comm_state = s;
 }
 
-connect_status_t pw_ir_get_connect_status() {
-    return g_connect_status;
+comm_state_t pw_ir_get_comm_state() {
+    return g_comm_state;
 }
 
 ir_err_t pw_ir_send_advertising_packet() {
@@ -142,6 +141,6 @@ ir_err_t pw_ir_send_advertising_packet() {
 
 void pw_ir_die(const char* message) {
     printf("IR disconnecting: %s\n", message);
-    pw_ir_set_connect_status(CONNECT_STATUS_DISCONNECTED);
+    pw_ir_set_comm_state(COMM_STATE_DISCONNECTED);
 }
 
