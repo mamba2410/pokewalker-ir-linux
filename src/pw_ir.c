@@ -12,8 +12,6 @@ uint8_t session_id[4] = {0xde, 0xad, 0xbe, 0xef};
 
 uint8_t tx_buf[PW_TX_BUF_LEN];
 uint8_t rx_buf[PW_RX_BUF_LEN];
-uint8_t tx_buf_aa[PW_TX_BUF_LEN];
-uint8_t rx_buf_aa[PW_RX_BUF_LEN];
 
 const char* const PW_IR_ERR_NAMES[] = {
     [IR_OK] = "ok",
@@ -30,13 +28,10 @@ const char* const PW_IR_ERR_NAMES[] = {
 };
 
 
-ir_err_t pw_ir_send_packet(uint8_t *packet, size_t len, size_t *n_write) {
+ir_err_t pw_ir_send_packet(uint8_t *packet, size_t len, size_t *pn_write) {
 
     for(uint8_t i = 0; i < 4; i++)
         packet[4+i] = session_id[i];
-
-    packet[0x02] = 0;
-    packet[0x03] = 0;
 
     uint16_t chk = pw_ir_checksum(packet, len);
 
@@ -44,53 +39,39 @@ ir_err_t pw_ir_send_packet(uint8_t *packet, size_t len, size_t *n_write) {
     packet[0x02] = (uint8_t)(chk&0xff);
     packet[0x03] = (uint8_t)(chk>>8);
 
-
-
     for(size_t i = 0; i < len; i++)
-        tx_buf_aa[i] = packet[i] ^ 0xaa;
+        packet[i] ^= 0xaa;
 
-    *n_write = (size_t)pw_ir_write(tx_buf_aa, len);
+    int n_write = pw_ir_write(packet, len);
+    *pn_write = (size_t)n_write;
 
-    if(*n_write != len)
-        return IR_ERR_BAD_SEND;
+    if(n_write != len) return IR_ERR_BAD_SEND;
 
     return IR_OK;
 }
 
-ir_err_t pw_ir_recv_packet(uint8_t *packet, size_t len, size_t *n_read) {
+ir_err_t pw_ir_recv_packet(uint8_t *packet, size_t len, size_t *pn_read) {
 
-    for(size_t i = 0; i < len; i++) {
-        rx_buf_aa[i] = 0;
-    }
+    *pn_read = 0;
+    int n_read = pw_ir_read(packet, len);
 
-    *n_read = (size_t)pw_ir_read(rx_buf_aa, len);
+    if(n_read <= 0) return IR_ERR_TIMEOUT;
+    *pn_read = (size_t)n_read;
 
-    if(*n_read <= 0) {
-        return IR_ERR_TIMEOUT;
-    }
+    for(int i = 0; i < n_read; i++)
+        packet[i] ^= 0xaa;
 
-    for(size_t i = 0; i < len; i++)
-        packet[i] = rx_buf_aa[i] ^ 0xaa;
-
-    if(*n_read != len) {
-        return IR_ERR_SIZE_MISMATCH;
-    }
-
+    if(n_read != len) return IR_ERR_SIZE_MISMATCH;
 
     // packet chk LE
     uint16_t packet_chk = (((uint16_t)packet[3])<<8) + ((uint16_t)packet[2]);
     uint16_t chk = pw_ir_checksum(packet, len);
 
-    if(packet_chk != chk) {
-        return IR_ERR_BAD_CHECKSUM;
+    if(packet_chk != chk) return IR_ERR_BAD_CHECKSUM;
+
+    for(size_t i = i; i < 4; i++) {
+        if(packet[4+i] != session_id[i]) return IR_ERR_BAD_SESSID;
     }
-
-    bool session_id_ok = true;
-    for(size_t i = i; (i < 4)&&session_id_ok; i++)
-        session_id_ok = packet[4+i] == session_id[i];
-
-    if(!session_id_ok)
-        return IR_ERR_BAD_SESSID;
 
     return IR_OK;
 }
