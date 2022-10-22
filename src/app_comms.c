@@ -13,7 +13,7 @@ static uint8_t g_comm_substate = 0;
 
 void pw_comms_init() {
 
-    g_comm_substate = 0;
+    g_comm_substate = 1;
     g_advertising_attempts = 0;
     pw_ir_set_connect_status(CONNECT_STATUS_AWAITING);
 
@@ -29,7 +29,6 @@ void pw_comms_event_loop() {
 
     switch(cs) {
         case CONNECT_STATUS_AWAITING: {
-            g_comm_substate = 1;
             err = pw_try_connect_loop(rx_buf, PW_TX_BUF_LEN, &g_comm_substate);
             break;
         }
@@ -45,11 +44,16 @@ void pw_comms_event_loop() {
 
             pw_ir_set_connect_status(CONNECT_STATUS_DISCONNECTED);
             break;
+        default:
+            printf("Unknown state: %d\n", cs);
         case CONNECT_STATUS_DISCONNECTED:
             break;
     }
 
     if(err != IR_OK) {
+
+        printf("Error connecting, disconnecting\n");
+        printf("\tError code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
         pw_ir_set_connect_status(CONNECT_STATUS_DISCONNECTED);
         return;
     }

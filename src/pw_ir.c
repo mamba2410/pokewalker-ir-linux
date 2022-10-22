@@ -69,6 +69,9 @@ ir_err_t pw_ir_recv_packet(uint8_t *packet, size_t len, size_t *n_read) {
         return IR_ERR_TIMEOUT;
     }
 
+    for(size_t i = 0; i < len; i++)
+        packet[i] = rx_buf_aa[i] ^ 0xaa;
+
     if(*n_read != len) {
         printf("read %lu; expected %lu\n", *n_read, len);
         printf("Packet header: ");
@@ -79,8 +82,6 @@ ir_err_t pw_ir_recv_packet(uint8_t *packet, size_t len, size_t *n_read) {
         return IR_ERR_SIZE_MISMATCH;
     }
 
-    for(size_t i = 0; i < len; i++)
-        packet[i] = rx_buf_aa[i] ^ 0xaa;
 
     // packet chk LE
     uint16_t packet_chk = (((uint16_t)packet[3])<<8) + ((uint16_t)packet[2]);
@@ -237,4 +238,9 @@ ir_err_t pw_ir_send_advertising_packet() {
     return IR_OK;
 }
 
+
+void pw_ir_die(const char* message) {
+    printf("IR disconnecting: %s\n", message);
+    pw_ir_set_connect_status(CONNECT_STATUS_DISCONNECTED);
+}
 

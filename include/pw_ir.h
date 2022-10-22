@@ -114,7 +114,7 @@ uint16_t pw_ir_checksum(uint8_t *packet, size_t len);
 
 void pw_ir_set_connect_status(connect_status_t s);
 connect_status_t pw_ir_get_connect_status();
-
+void pw_ir_die(const char* message);
 
 
 #endif /* PW_IR_H */

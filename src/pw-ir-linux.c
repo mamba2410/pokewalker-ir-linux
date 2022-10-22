@@ -53,7 +53,7 @@ void print_packet(uint8_t *buf, size_t len) {
 
 int main(int argc, char** argv){
 
-    //pw_ir_init();
+    pw_ir_init();
     ir_err_t err;
 
     uint8_t buf[8];
@@ -73,6 +73,8 @@ int main(int argc, char** argv){
     err = pw_ir_recv_packet(buf, 8);
     print_packet(buf, 8);
     */
+
+    pw_comms_init();
 
     // Run our comms loop
 

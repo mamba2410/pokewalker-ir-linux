@@ -10,12 +10,15 @@
  */
 ir_err_t pw_ir_advertise_and_listen(uint8_t *rx, size_t *n_read) {
 
+    printf("Attempting to recv advert packet\n");
     ir_err_t err = pw_ir_recv_packet(rx, 8, n_read);
 
     // if we didn't read anything, send an advertising packet
-    if(*n_read == 0 && err == IR_OK) {
-        err = pw_ir_send_advertising_packet();
+    //if(*n_read == 0 && err == IR_OK) {
+    if( !(err == IR_OK || err == IR_ERR_SIZE_MISMATCH) ) {
+        ir_err_t err2 = pw_ir_send_advertising_packet();
 
+        //printf("Sent advertisement %d\n", g_advertising_attempts);
         g_advertising_attempts++;
         if(g_advertising_attempts > MAX_ADVERTISING_PACKETS) {
             return IR_ERR_ADVERTISING_MAX;
@@ -57,6 +60,7 @@ ir_err_t pw_try_connect_loop(uint8_t *packet, size_t packet_max, uint8_t *substa
                     break;
             }
 
+            break;
         }
         case 2: {   // have peer, determine master/slave
             // We should already have a response in the packet buffer
@@ -75,6 +79,7 @@ ir_err_t pw_try_connect_loop(uint8_t *packet, size_t packet_max, uint8_t *substa
                     pw_ir_set_connect_status(CONNECT_STATUS_SLAVE);
                     break;
                 default:
+                    pw_ir_set_connect_status(CONNECT_STATUS_DISCONNECTED);
                     return IR_ERR_UNEXPECTED_PACKET;
             }
             break;
@@ -96,6 +101,10 @@ ir_err_t pw_try_connect_loop(uint8_t *packet, size_t packet_max, uint8_t *substa
             pw_ir_set_connect_status(CONNECT_STATUS_MASTER);
 
             break;
+        }
+        default: {
+            printf("In unknown substate: %d\n", *substate);
+            return IR_ERR_GENERAL;
         }
 
     }

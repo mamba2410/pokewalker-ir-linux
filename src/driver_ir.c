@@ -15,24 +15,21 @@ int pw_ir_read(uint8_t *buf, size_t max_len) {
 
     int total_read=0, bytes_read, bytes_available, bytes_left;
 
-    do {
-        ioctl(ir_fd, FIONREAD, &bytes_available);
-    } while(bytes_available < max_len);
-
-    //printf("\t%02x bytes available\n", bytes_available);
-    total_read = read(ir_fd, buf, max_len);
-
     /*
+    // Block until we have a full buffer
     do {
-        bytes_left = max_len - total_read;
         ioctl(ir_fd, FIONREAD, &bytes_available);
-        if(bytes_available>0) {
-            bytes_read = read(ir_fd, buf+total_read, bytes_left);
-            total_read += bytes_read;
-        }
     } while(bytes_available < max_len);
+
     */
 
+
+    total_read = read(ir_fd, buf, max_len);
+
+    printf("\tread: ");
+    for(size_t i = 0; i < total_read; i++)
+        printf("%02x", buf[i]^0xaa);
+    printf("\n");
 
     return total_read;
 }
@@ -57,7 +54,12 @@ int pw_ir_clear_rx() {
 }
 
 int pw_ir_init() {
-    ir_fd = open("/dev/ttyUSB1", O_RDWR);
+    const char fname[] = "/dev/ttyUSB1";
+    ir_fd = open(fname, O_RDWR);
+    if(ir_fd <= 0) {
+        //sprintf(stderr, "Error: cannot open %s for serial.\n", fname);
+        printf("Error: cannot open %s for serial.\n", fname);
+    }
 
     struct termios tty;
 
