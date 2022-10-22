@@ -89,7 +89,9 @@ ir_err_t pw_action_try_find_peer(uint8_t *packet, size_t packet_max,
                 return IR_ERR_UNEXPECTED_PACKET;
             }
 
-            // TODO: combine keys
+            // combine keys
+            for(int i = 0; i < 4; i++)
+                session_id[i] ^= packet[4+i];
 
             // key exchange done, we are now master
             pw_ir_set_comm_state(COMM_STATE_MASTER);
