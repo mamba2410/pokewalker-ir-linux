@@ -419,24 +419,29 @@
 //#define PW_EEPROM_ADDR_0xb804 0xb804  // data for "special map received". format unknown. possibly used by the ds games, but no evidence of this found in the games.
 //#define PW_EEPROM_SIZE_0xb804 576
 // TODO: multiple columns
-#define PW_EEPROM_ADDR_EVENT_POKEMON_BASIC_DATA 0xba44  // gifted event poke, or radar-caught event poke
+#define PW_EEPROM_ADDR_EVENT_POKEMON_BASIC_DATA 0xba44  // gifted event poke, or radar-caught event poke, basic data. struct PokemonSummary
 #define PW_EEPROM_SIZE_EVENT_POKEMON_BASIC_DATA 16
 #define PW_EEPROM_ADDR_EVENT_POKEMON_EXTRA_DATA 0xba54  // extra data. struct eventpokeextradata
 #define PW_EEPROM_SIZE_EVENT_POKEMON_EXTRA_DATA 44
-#define PW_EEPROM_ADDR_IMG_EVENT_POKEMON_LARGE_ANIMATED 0xba80  // small sprite 32 x 24 x 2 frames
-#define PW_EEPROM_SIZE_IMG_EVENT_POKEMON_LARGE_ANIMATED 384
+#define PW_EEPROM_ADDR_IMG_EVENT_POKEMON_SMALL_ANIMATED 0xba80  // small sprite 32 x 24 x 2 frames
+#define PW_EEPROM_SIZE_IMG_EVENT_POKEMON_SMALL_ANIMATED 384
+#define PW_EEPROM_SIZE_IMG_EVENT_POKEMON_SMALL_ANIMATED_FRAME 192
+#define PW_EEPROM_ADDR_IMG_EVENT_POKEMON_SMALL_ANIMATED_FRAME1 (PW_EEPROM_ADDR_IMG_EVENT_POKEMON_SMALL_ANIMATED+0*PW_EEPROM_SIZE_IMG_EVENT_POKEMON_SMALL_ANIMATED_FRAME)
+#define PW_EEPROM_ADDR_IMG_EVENT_POKEMON_SMALL_ANIMATED_FRAME2 (PW_EEPROM_ADDR_IMG_EVENT_POKEMON_SMALL_ANIMATED+1*PW_EEPROM_SIZE_IMG_EVENT_POKEMON_SMALL_ANIMATED_FRAME)
 #define PW_EEPROM_ADDR_TEXT_EVENT_POKEMON_NAME 0xbc00  // name image 80x16
 #define PW_EEPROM_SIZE_TEXT_EVENT_POKEMON_NAME 320
 // TODO: multiple columns
-#define PW_EEPROM_ADDR_EVENT_ITEM 0xbd40  // gifted event item, or dowsed event item
+#define PW_EEPROM_ADDR_EVENT_ITEM 0xbd40  // gifted event item, or dowsed event item, item data. 6 bytes of zeroes, then u16 item, LE
 #define PW_EEPROM_SIZE_EVENT_ITEM 8
 #define PW_EEPROM_ADDR_TEXT_EVENT_ITEM_NAME 0xbd48  // item name image 96x16
 #define PW_EEPROM_SIZE_TEXT_EVENT_ITEM_NAME 384
-#define PW_EEPROM_ADDR_0xbec8 0xbec8  // unused
-#define PW_EEPROM_SIZE_0xbec8 56
+//#define PW_EEPROM_ADDR_0xbec8 0xbec8  // unused
+//#define PW_EEPROM_SIZE_0xbec8 56
 // TODO: multiple columns
 #define PW_EEPROM_ADDR_SPECIAL_ROUTE_STRUCT 0xbf00  // "special route" info (struct specialroute):
-#define PW_EEPROM_SIZE_SPECIAL_ROUTE_STRUCT 6   // TODO: incorrect struct size
+#define PW_EEPROM_SIZE_SPECIAL_ROUTE_STRUCT 3260
+//#define PW_EEPROM_ADDR_0xbf00 0xbf00  // "special route" info (struct specialroute):
+//#define PW_EEPROM_SIZE_0xbf00 6
 #define PW_EEPROM_ADDR_ROUTE_IMAGE_IDX 0xbf06 // enum routeimageidx
 #define PW_EEPROM_ADDR_0xbf07 0xbf07 // unused
 #define PW_EEPROM_ADDR_SPECIAL_POKEMON_BASIC_DATA 0xbf08  // special route-available pokemon basic data. struct pokemonsummary
@@ -446,20 +451,23 @@
 #define PW_EEPROM_ADDR_SPECIAL_POKEMON_STEPS_REQUIRED 0xbf44  // min steps to encounter this poke on the route. u16 le
 #define PW_EEPROM_SIZE_SPECIAL_POKEMON_STEPS_REQUIRED 2
 #define PW_EEPROM_ADDR_SPECIAL_POKEMON_PERCENT_CHANCE 0xbf46 // percent chance to encounter this poke on route after step minimum met
-#define PW_EEPROM_ADDR_0xbf47 0xbf47 // unused
+//#define PW_EEPROM_ADDR_0xbf47 0xbf47 // unused
 #define PW_EEPROM_ADDR_SPECIAL_ITEM 0xbf48  // special route-available item. u16 le
 #define PW_EEPROM_SIZE_SPECIAL_ITEM 2
 #define PW_EEPROM_ADDR_SPECIAL_ITEM_STEPS_REQUIRED 0xbf4a  // min steps dowse this item. u16 le
 #define PW_EEPROM_SIZE_SPECIAL_ITEM_STEPS_REQUIRED 2
 #define PW_EEPROM_ADDR_SPECIAL_ITEM_PERCENT_CHANCE 0xbf4c // percent chance to dowse this item on route after step minimum met
-#define PW_EEPROM_ADDR_0xbf4d 0xbf4d  // unused
-#define PW_EEPROM_SIZE_0xbf4d 3
+//#define PW_EEPROM_ADDR_0xbf4d 0xbf4d  // unused
+//#define PW_EEPROM_SIZE_0xbf4d 3
 #define PW_EEPROM_ADDR_SPECIAL_ROUTE_NAME_NINTENDOENC 0xbf50  // routename u16[21]
 #define PW_EEPROM_SIZE_SPECIAL_ROUTE_NAME_NINTENDOENC 42
-#define PW_EEPROM_ADDR_0xbf7a 0xbf7a // \"event index\" for catching this route's special pokemon
-#define PW_EEPROM_ADDR_0xbf7b 0xbf7b // \"event index\" for dowsing this route's special item
-#define PW_EEPROM_ADDR_IMG_SPECIAL_POKEMON_LARGE_ANIMATED 0xbf7c  // special route pokemon animates small sprite. 32 x 24 x 2 frames. should be 0x180 bytes big, but it 0x170. no idea why but confirmed
-#define PW_EEPROM_SIZE_IMG_SPECIAL_POKEMON_LARGE_ANIMATED 1920
+#define PW_EEPROM_ADDR_SPECIAL_POKEMON_EVENT_INDEX 0xbf7a // \"event index\" for catching this route's special pokemon
+#define PW_EEPROM_ADDR_SPECIAL_ITEM_EVENT_INDEX 0xbf7b // \"event index\" for dowsing this route's special item
+#define PW_EEPROM_ADDR_IMG_SPECIAL_POKEMON_SMALL_ANIMATED 0xbf7c  // special route pokemon animates small sprite. 32 x 24 x 2 frames. should be 0x180 bytes big, but it 0x170. no idea why but confirmed
+#define PW_EEPROM_SIZE_IMG_SPECIAL_POKEMON_SMALL_ANIMATED 368
+#define PW_EEPROM_SIZE_IMG_SPECIAL_POKEMON_SMALL_ANIMATED_FRAME 172 // NOTE: NOT 192
+#define PW_EEPROM_ADDR_IMG_SPECIAL_POKEMON_SMALL_ANIMATED_FRAME1 (PW_EEPROM_ADDR_IMG_SPECIAL_POKEMON_SMALL_ANIMATED+0*PW_EEPROM_SIZE_IMG_SPECIAL_POKEMON_SMALL_ANIMATED_FRAME)
+#define PW_EEPROM_ADDR_IMG_SPECIAL_POKEMON_SMALL_ANIMATED_FRAME2 (PW_EEPROM_ADDR_IMG_SPECIAL_POKEMON_SMALL_ANIMATED+1*PW_EEPROM_SIZE_IMG_SPECIAL_POKEMON_SMALL_ANIMATED_FRAME)
 #define PW_EEPROM_ADDR_TEXT_SPECIAL_POKEMON_NAME 0xc6fc  // special route pokemon name image 80x16
 #define PW_EEPROM_SIZE_TEXT_SPECIAL_POKEMON_NAME 320
 #define PW_EEPROM_ADDR_IMG_SPECIAL_ROUTE_IMAGE 0xc83c  // special routes's large image for home screen, like 0x8fbe is for a normal route 32x24
@@ -468,41 +476,64 @@
 #define PW_EEPROM_SIZE_TEXT_SPECIAL_ROUTE_NAME_SMALL 320
 #define PW_EEPROM_ADDR_TEXT_SPECIAL_ROUTE_NAME 0xca3c  // special route item textual name 96x16
 #define PW_EEPROM_SIZE_TEXT_SPECIAL_ROUTE_NAME 384
-#define PW_EEPROM_ADDR_0xcbbc 0xcbbc  // unused
-#define PW_EEPROM_SIZE_0xcbbc 68
+//#define PW_EEPROM_ADDR_0xcbbc 0xcbbc  // unused
+//#define PW_EEPROM_SIZE_0xcbbc 68
 #define PW_EEPROM_ADDR_TEAM_DATA_STRUCT 0xcc00  // struct teamdata on our whole team, so that any walkers we peer play with transfer it to their ds game and we can be battled in the trainer house
 #define PW_EEPROM_SIZE_TEAM_DATA_STRUCT 548
-#define PW_EEPROM_ADDR_0xce24 0xce24  // also written at walk start time as part of the above. probably just to keep the write a multiple of 0x80 bytes
-#define PW_EEPROM_SIZE_0xce24 92
-#define PW_EEPROM_ADDR_0xce80 0xce80  // unused
-#define PW_EEPROM_SIZE_0xce80 8
+//#define PW_EEPROM_ADDR_0xce24 0xce24  // also written at walk start time as part of the above. probably just to keep the write a multiple of 0x80 bytes
+//#define PW_EEPROM_SIZE_0xce24 92
+//#define PW_EEPROM_ADDR_0xce80 0xce80  // unused
+//#define PW_EEPROM_SIZE_0xce80 8
 #define PW_EEPROM_ADDR_0xce88 0xce88 // if low bit set, game will give player a starf berry once per savefile. used when 99999 steps reached
-#define PW_EEPROM_ADDR_0xce89 0xce89 // unused
+//#define PW_EEPROM_ADDR_0xce89 0xce89 // unused
 #define PW_EEPROM_ADDR_0xce8a 0xce8a  // current watts written to eeprom by cmd 0x20 before replying (likely so remote can read them directly). u16 be
 #define PW_EEPROM_SIZE_0xce8a 2
 #define PW_EEPROM_ADDR_CAUGHT_POKEMON_SUMMARY 0xce8c  // 3x route-available pokemon we've caught so far. 3x struct pokemonsummary
 #define PW_EEPROM_SIZE_CAUGHT_POKEMON_SUMMARY 48
+#define PW_EEPROM_SIZE_CAUGHT_POKEMON_SUMMARY_SINGLE 16
+#define PW_EEPROM_ADDR_CAUGHT_POKEMON_SUMMARY0 (PW_EEPROM_ADDR_CAUGHT_POKEMON_SUMMARY+0*PW_EEPROM_SIZE_CAUGHT_POKEMON_SUMMARY_SINGLE)
+#define PW_EEPROM_ADDR_CAUGHT_POKEMON_SUMMARY1 (PW_EEPROM_ADDR_CAUGHT_POKEMON_SUMMARY+1*PW_EEPROM_SIZE_CAUGHT_POKEMON_SUMMARY_SINGLE)
+#define PW_EEPROM_ADDR_CAUGHT_POKEMON_SUMMARY2 (PW_EEPROM_ADDR_CAUGHT_POKEMON_SUMMARY+2*PW_EEPROM_SIZE_CAUGHT_POKEMON_SUMMARY_SINGLE)
 #define PW_EEPROM_ADDR_OBTAINED_ITEMS 0xcebc  // 3x route-available items we've dowsed so far. 3x {u16 le item, u16 le unused}
 #define PW_EEPROM_SIZE_OBTAINED_ITEMS 12
+#define PW_EEPROM_SIZE_OBTAINED_ITEMS_SINGLE 4
+#define PW_EEPROM_ADDR_OBTAINED_ITEM0 (PW_EEPROM_ADDR_OBTAINED_ITEMS+0*PW_EEPROM_SIZE_OBTAINED_ITEMS_SINGLE)
+#define PW_EEPROM_ADDR_OBTAINED_ITEM1 (PW_EEPROM_ADDR_OBTAINED_ITEMS+1*PW_EEPROM_SIZE_OBTAINED_ITEMS_SINGLE)
+#define PW_EEPROM_ADDR_OBTAINED_ITEM2 (PW_EEPROM_ADDR_OBTAINED_ITEMS+2*PW_EEPROM_SIZE_OBTAINED_ITEMS_SINGLE)
 #define PW_EEPROM_ADDR_PEER_PLAY_ITEMS 0xcec8  // 10x route-available items we've been gifted by peer play. 3x {u16 le item, u16 le unused}
 #define PW_EEPROM_SIZE_PEER_PLAY_ITEMS 40
+#define PW_EEPROM_SIZE_PEER_PLAY_ITEM_SINGLE 4
+#define PW_EEPROM_ADDR_PEER_PLAY_ITEM0 (PW_EEPROM_ADDR_PEER_PLAY_ITEMS+0*PW_EEPROM_SIZE_PEER_PLAY_ITEM_SINGLE)
+#define PW_EEPROM_ADDR_PEER_PLAY_ITEM1 (PW_EEPROM_ADDR_PEER_PLAY_ITEMS+1*PW_EEPROM_SIZE_PEER_PLAY_ITEM_SINGLE)
+#define PW_EEPROM_ADDR_PEER_PLAY_ITEM2 (PW_EEPROM_ADDR_PEER_PLAY_ITEMS+2*PW_EEPROM_SIZE_PEER_PLAY_ITEM_SINGLE)
+#define PW_EEPROM_ADDR_PEER_PLAY_ITEM3 (PW_EEPROM_ADDR_PEER_PLAY_ITEMS+3*PW_EEPROM_SIZE_PEER_PLAY_ITEM_SINGLE)
+#define PW_EEPROM_ADDR_PEER_PLAY_ITEM4 (PW_EEPROM_ADDR_PEER_PLAY_ITEMS+4*PW_EEPROM_SIZE_PEER_PLAY_ITEM_SINGLE)
+#define PW_EEPROM_ADDR_PEER_PLAY_ITEM5 (PW_EEPROM_ADDR_PEER_PLAY_ITEMS+5*PW_EEPROM_SIZE_PEER_PLAY_ITEM_SINGLE)
+#define PW_EEPROM_ADDR_PEER_PLAY_ITEM6 (PW_EEPROM_ADDR_PEER_PLAY_ITEMS+6*PW_EEPROM_SIZE_PEER_PLAY_ITEM_SINGLE)
+#define PW_EEPROM_ADDR_PEER_PLAY_ITEM7 (PW_EEPROM_ADDR_PEER_PLAY_ITEMS+7*PW_EEPROM_SIZE_PEER_PLAY_ITEM_SINGLE)
+#define PW_EEPROM_ADDR_PEER_PLAY_ITEM8 (PW_EEPROM_ADDR_PEER_PLAY_ITEMS+8*PW_EEPROM_SIZE_PEER_PLAY_ITEM_SINGLE)
+#define PW_EEPROM_ADDR_PEER_PLAY_ITEM9 (PW_EEPROM_ADDR_PEER_PLAY_ITEMS+9*PW_EEPROM_SIZE_PEER_PLAY_ITEM_SINGLE)
 #define PW_EEPROM_ADDR_HISTORIC_STEP_COUNT 0xcef0  // historic step count per day. u32 each, be, [0] is yesterday, [1] is day before, etc...
 #define PW_EEPROM_SIZE_HISTORIC_STEP_COUNT 28
-// TODO: multiple columns, wrong sizes
 #define PW_EEPROM_ADDR_EVENT_LOG 0xcf0c  // event log. circularly-written, displayed in time order. 24x struct eventlogitem
-#define PW_EEPROM_SIZE_EVENT_LOG 1396
-#define PW_EEPROM_ADDR_0xd480 0xd480  // team data written here before walk start action. struct teamdata
-#define PW_EEPROM_SIZE_0xd480 640
-#define PW_EEPROM_ADDR_0xd700 0xd700
-#define PW_EEPROM_SIZE_0xd700 1228
+#define PW_EEPROM_SIZE_EVENT_LOG 3264
+#define PW_EEPROM_SIZE_EVENT_LOG_SINGLE 136
+#define PW_EEPROM_ADDR_TEAM_DATA_STAGING 0xd480  // team data written here before walk start action. struct teamdata
+#define PW_EEPROM_SIZE_TEAM_DATA_STAGING 640
+#define PW_EEPROM_ADDR_SCENARIo_DATA_STAGING 0xd700 // scenario data written here before walk start action. everything that 0x8F00-0xB7FF would have
+#define PW_EEPROM_SIZE_SCENARIo_DATA_STAGING 8184
 #define PW_EEPROM_ADDR_CURRENT_PEER_TEAM_DATA 0xdc00  // current peer play peer. struct teamdata. uploaded as part of peer play. later shifted to index [0] at 0xde24 list of peers
 #define PW_EEPROM_SIZE_CURRENT_PEER_TEAM_DATA 548
 #define PW_EEPROM_ADDR_MET_PEER_DATA 0xde24  // peers we've met. for battle house info. newest element is first. 10x struct teamdata
 #define PW_EEPROM_SIZE_MET_PEER_DATA 5480
-#define PW_EEPROM_ADDR_0xf38c 0xf38c  // unused
-#define PW_EEPROM_SIZE_0xf38c 116
-#define PW_EEPROM_ADDR_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL 0xf400  // peer play temporary data about peer
+#define PW_EEPROM_SIZE_MET_PEER_DATA_SINGLE 548
+//#define PW_EEPROM_ADDR_0xf38c 0xf38c  // unused
+//#define PW_EEPROM_SIZE_0xf38c 116
+#define PW_EEPROM_ADDR_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL 0xf400  // peer play temporary data about peer, medium pokemon animated image of pokemon we are peer-playing with (never erased) 32x24 x 2 frames
 #define PW_EEPROM_SIZE_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL 384
+#define PW_EEPROM_SIZE_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL_FRAME 192
+#define PW_EEPROM_ADDR_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL_FRAME1 (PW_EEPROM_ADDR_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL+0*PW_EEPROM_SIZE_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL_FRAME)
+#define PW_EEPROM_ADDR_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL_FRAME2 (PW_EEPROM_ADDR_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL+1*PW_EEPROM_SIZE_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL_FRAME)
 #define PW_EEPROM_ADDR_TEXT_CURRENT_PEER_POKEMON_NAME 0xf580  // rendered text name of pokemon we are peer-playing with 80x16
 #define PW_EEPROM_SIZE_TEXT_CURRENT_PEER_POKEMON_NAME 320
 #define PW_EEPROM_ADDR_CURRENT_PEER_DATA 0xf6c0  // data. struct peerplaydata
