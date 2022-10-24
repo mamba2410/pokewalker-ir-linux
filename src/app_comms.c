@@ -54,8 +54,8 @@ void pw_comms_event_loop() {
     }
 
     if(err != IR_OK) {
-        printf("\tError code: %02x: %s\n\tSubstate %s", err, PW_IR_ERR_NAMES[err], g_comm_substate);
         pw_ir_die("Error during pw_comms_event_loop");
+        printf("\tError code: %02x: %s\n\tSubstate %d\n", err, PW_IR_ERR_NAMES[err], g_comm_substate);
         return;
     }
 

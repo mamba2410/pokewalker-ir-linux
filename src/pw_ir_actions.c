@@ -143,7 +143,9 @@ ir_err_t pw_action_peer_play(comm_substate_t *psubstate, uint8_t *counter, uint8
 
             packet[0] = CMD_PEER_PLAY_START;
             packet[1] = EXTRA_BYTE_FROM_WALKER;
-            pw_eeprom_reliable_read(PW_EEPROM_ADDR_IDENTITY_DATA_1, PW_EEPROM_ADDR_IDENTITY_DATA_2,
+            //pw_eeprom_reliable_read(PW_EEPROM_ADDR_IDENTITY_DATA_1, PW_EEPROM_ADDR_IDENTITY_DATA_2,
+            //        packet+8, PW_EEPROM_SIZE_IDENTITY_DATA_1);
+            pw_eeprom_read(PW_EEPROM_ADDR_IDENTITY_DATA_1,
                     packet+8, PW_EEPROM_SIZE_IDENTITY_DATA_1);
             packet[0x18] = (uint8_t)(rand()&0xff);  // Hack to change UID each time
                                                     // to prevent "alreadt connected" error
@@ -381,10 +383,9 @@ ir_err_t pw_action_send_large_raw_data_from_eeprom(uint16_t src, uint16_t dst, s
     }
 
     if( (cur_write_addr&0x07) > 0) return IR_ERR_UNALIGNED_WRITE;
-    if( (final_write_size&0x07) > 0) return IR_ERR_UNALIGNED_WRITE;
+    //if( (final_write_size&0x07) > 0) return IR_ERR_UNALIGNED_WRITE;   // walker can handle this
 
-    usleep(4000);   // ESSENTIAL
-                    // TODO: create a pw_ir_delay_ms()
+    pw_ir_delay_ms(4);
 
     if( cur_write_size < final_write_size) {
         packet[0] = (uint8_t)(cur_write_addr&0xff) + 2; // Need +2 to make it raw write command
@@ -428,8 +429,7 @@ ir_err_t pw_action_read_large_raw_data_from_eeprom(uint16_t src, uint16_t dst, s
     err = pw_ir_send_packet(packet, 8+3, &n_read);
     if(err != IR_OK) return err;
 
-    usleep(4000);   // probably needed
-                    // TODO: See above
+    pw_ir_delay_ms(4);
 
     err = pw_ir_recv_packet(packet, read_size+8, &n_read);
     if(err != IR_OK) return err;
