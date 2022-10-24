@@ -23,7 +23,6 @@ int pw_ir_read(uint8_t *buf, size_t max_len) {
 
     do {
         ioctl(ir_fd, FIONREAD, &bytes_available);
-        //if(bytes_available > 0) printf("%d\n", bytes_available);
         gettimeofday(&now, NULL);
         t = (now.tv_sec - start.tv_sec)*1000000 + (now.tv_usec - start.tv_usec);
     } while( (bytes_available <= 0) && ( t < 500*1000) );
@@ -35,6 +34,7 @@ int pw_ir_read(uint8_t *buf, size_t max_len) {
 
     }
 
+#ifdef DRIVER_IR_DEBUG_READ
     printf("\tread: (%lu us)", t);
     for(size_t i = 0; i < total_read; i++) {
         if(i%8 == 0) printf(" ");
@@ -42,6 +42,7 @@ int pw_ir_read(uint8_t *buf, size_t max_len) {
         printf("%02x", buf[i]^0xaa);
     }
     printf("\n");
+#endif /* DRIVER_IR_DEBUG_READ */
 
     return total_read;
 }
@@ -54,6 +55,7 @@ int pw_ir_write(uint8_t *buf, size_t len) {
     gettimeofday(&now, NULL);
     uint64_t t = (now.tv_sec - start.tv_sec)*1000000 + (now.tv_usec - start.tv_usec);
 
+#ifdef DRIVER_IR_DEBUG_WRITE
     printf("\twrite: (%lu us)", t);
     for(size_t i = 0; i < len; i++) {
         if(i%8 == 0) printf(" ");
@@ -61,6 +63,7 @@ int pw_ir_write(uint8_t *buf, size_t len) {
         printf("%02x", buf[i]^0xaa);
     }
     printf("\n");
+#endif /* DRIVER_IR_DEBUG_WRITE */
 
     return total_written;
 }
@@ -83,7 +86,7 @@ int pw_ir_init() {
 
     if(tcgetattr(ir_fd, &tty) != 0) {
         printf("Error %i from tcgetattr: %s\n", errno, strerror(errno));
-        return 1;
+        return -1;
     }
 
     tty.c_cflag &= ~PARENB; // Clear parity bit, disabling parity (most common)
@@ -109,24 +112,18 @@ int pw_ir_init() {
     // see http://unixwiz.net/techtips/termios-vmin-vtime.html
     // for reference, 136 bytes @115200 baud takes ~10ms, 100ms since first read is more than enough
 
-    // ~~reads break 1 deci-second after first byte, or after 255 characters, whichever comes first~~
-    //tty.c_cc[VTIME] = 1;    // max time between bytes = 100ms
-    //tty.c_cc[VMIN] = 255;   // min number of bytes per read is 255
-
     // i.e. timeout 200ms after start of read
     // NOTE: behaviour needs testing, I don't know if it will break after the first byte or if it will
     // break if the timer runs out while there is still data incoming
     tty.c_cc[VTIME] = 2;    // max time between bytes = 200ms
     tty.c_cc[VMIN] = 0;     // min number of bytes per read is 0
-    //tty.c_cc[VTIME] = 2;    // max time between bytes = 200ms
-    //tty.c_cc[VMIN] = 1;     // min number of bytes per read is 1
 
     cfsetispeed(&tty, B115200);
     cfsetospeed(&tty, B115200);
 
     if (tcsetattr(ir_fd, TCSANOW, &tty) != 0) {
       printf("Error %i from tcsetattr: %s\n", errno, strerror(errno));
-      return 1;
+      return -1;
     }
 
     tcflush(ir_fd, TCIFLUSH);
@@ -140,7 +137,10 @@ void pw_ir_flush_rx() {
 }
 
 void pw_ir_deinit() {
-
     close(ir_fd);
+}
+
+void pw_ir_delay_ms(size_t ms) {
+    usleep(ms*1000);
 }
 
