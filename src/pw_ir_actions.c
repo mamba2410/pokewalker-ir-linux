@@ -369,14 +369,17 @@ ir_err_t pw_action_read_large_raw_data_from_eeprom(uint16_t src, uint16_t dst, s
     //uint8_t read_size = (remaining_read<56)?remaining_read:56;
 
     packet[0] = CMD_EEPROM_READ_REQ;;
-    packet[1] = EXTRA_BYTE_FROM_WALKER;
+    packet[1] = EXTRA_BYTE_TO_WALKER;
     packet[8] = (uint8_t)(cur_read_addr>>8);
     packet[9] = (uint8_t)(cur_read_addr&0xff);
     packet[10] = read_size;
 
     err = pw_ir_send_packet(packet, 8+3, &n_read);
+    if(err != IR_OK) return err;
 
+    usleep(3000);
     err = pw_ir_recv_packet(packet, read_size+8, &n_read);
+    printf("read %lu/%lu bytes\n", n_read, read_size+8);
     if(err != IR_OK) return err;
     if(packet[0] != CMD_EEPROM_READ_RSP) return IR_ERR_UNEXPECTED_PACKET;
 
