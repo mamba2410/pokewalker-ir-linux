@@ -159,13 +159,12 @@ ir_err_t pw_action_peer_play(comm_substate_t *psubstate, uint8_t *counter, uint8
         case COMM_SUBSTATE_PEER_PLAY_ACK: {
 
             err = pw_ir_recv_packet(packet, 8+PW_EEPROM_SIZE_IDENTITY_DATA_1, &n_read);
-            if(err != IR_OK) return err;
-            if(packet[0] != CMD_PEER_PLAY_RSP) return IR_ERR_UNEXPECTED_PACKET;
             switch(packet[0]) {
                 case CMD_PEER_PLAY_RSP: break;
                 case CMD_PEER_PLAY_SEEN: return IR_ERR_PEER_ALREADY_SEEN;
                 default: return IR_ERR_UNEXPECTED_PACKET;
             }
+            if(err != IR_OK) return err;
 
             *psubstate = COMM_SUBSTATE_SEND_MASTER_SPRITES;
             *counter = 0;
