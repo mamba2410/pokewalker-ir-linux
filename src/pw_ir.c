@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdbool.h>
+
 #include <stdio.h>
 
 #include "driver_ir.h"
@@ -17,13 +18,18 @@ const char* const PW_IR_ERR_NAMES[] = {
     [IR_ERR_GENERAL] = "general",
     [IR_ERR_UNEXPECTED_PACKET] = "unexpected packet",
     [IR_ERR_LONG_PACKET] = "long packet",
-    [IR_ERR_SHORT_PACKET] = "Short packet",
+    [IR_ERR_SHORT_PACKET] = "short packet",
     [IR_ERR_SIZE_MISMATCH] = "size mismatch",
     [IR_ERR_ADVERTISING_MAX] = "max advertising",
     [IR_ERR_TIMEOUT] = "timeout",
     [IR_ERR_BAD_SEND] = "bad send",
     [IR_ERR_BAD_SESSID] = "bad session id",
     [IR_ERR_BAD_CHECKSUM] = "bad checksum",
+    [IR_ERR_CANNOT_CONNECT] = "cannot  connect",
+    [IR_ERR_NOT_IMPLEMENTED] = "not implemented",
+    [IR_ERR_PEER_ALREADY_SEEN] = "peer already seen",
+    [IR_ERR_UNKNOWN_SUBSTATE] = "unknown substate",
+    [IR_ERR_UNALIGNED_WRITE] = "unaligned eeprom write",
 };
 
 
@@ -97,7 +103,7 @@ uint16_t pw_ir_checksum(uint8_t *packet, size_t len) {
     uint16_t crc;
     uint8_t hc, lc;
 
-    // save original checksum
+    // save original checksum, LE
     lc = packet[2];
     hc = packet[3];
 
@@ -110,7 +116,7 @@ uint16_t pw_ir_checksum(uint8_t *packet, size_t len) {
         crc = pw_ir_checksum_seeded(packet+8, len-8, crc);
     }
 
-    // reload original checksum
+    // restore original checksum, LE
     packet[2] = lc;
     packet[3] = hc;
 
