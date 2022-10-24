@@ -40,10 +40,23 @@ void pw_comms_event_loop() {
             break;
         }
         case COMM_STATE_MASTER: {
-            printf("We are master!\n");
+            if(g_comm_substate == COMM_SUBSTATE_AWAITING_SLAVE_ACK) {
+                g_comm_substate = COMM_SUBSTATE_START_PEER_PLAY;
+                printf("We are master!\n");
+            }
             // only thing we can do is ask for peer play
+            err = pw_action_peer_play(&g_comm_substate, rx_buf, PW_RX_BUF_LEN);
 
-            pw_ir_set_comm_state(COMM_STATE_DISCONNECTED);
+            //rx_buf[0] = CMD_PING;
+            //rx_buf[1] = EXTRA_BYTE_FROM_WALKER;
+            //err = pw_ir_send_packet(rx_buf, 8, &n_read);
+            //usleep(3000);
+            //err = pw_ir_recv_packet(rx_buf, 8, &n_read);
+
+            if(err != IR_OK) {
+                printf("Peer play error, disconnecting\n");
+                pw_ir_set_comm_state(COMM_STATE_DISCONNECTED);
+            }
             break;
         }
         case COMM_STATE_DISCONNECTED: return;

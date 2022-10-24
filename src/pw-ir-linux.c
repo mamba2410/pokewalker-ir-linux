@@ -6,6 +6,7 @@
 #include "pw-ir-linux.h"
 #include "pw_ir.h"
 #include "driver_ir.h"
+#include "driver_eeprom_linux.h"
 #include "app_comms.h"
 
 
@@ -76,11 +77,15 @@ int main(int argc, char** argv){
     */
 
     pw_comms_init();
+    pw_eeprom_raw_init();
 
     // Run our comms loop
     do {
         pw_comms_event_loop();
-    } while( (cs=pw_ir_get_comm_state()) == COMM_STATE_AWAITING );
+    //} while( (cs=pw_ir_get_comm_state()) == COMM_STATE_AWAITING );
+    } while( (cs=pw_ir_get_comm_state()) != COMM_STATE_DISCONNECTED );
+
+    return 0;
 
     switch(cs) {
         case COMM_STATE_MASTER: {

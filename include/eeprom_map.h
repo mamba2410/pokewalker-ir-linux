@@ -58,7 +58,7 @@
 #define PW_EEPROM_ADDR_IMG_CHAR_ONE     (PW_EEPROM_ADDR_IMG_DIGITS+1*PW_EEPROM_SIZE_IMG_DIGITS)
 #define PW_EEPROM_ADDR_IMG_CHAR_TWO     (PW_EEPROM_ADDR_IMG_DIGITS+2*PW_EEPROM_SIZE_IMG_DIGITS)
 #define PW_EEPROM_ADDR_IMG_CHAR_THREE   (PW_EEPROM_ADDR_IMG_DIGITS+3*PW_EEPROM_SIZE_IMG_DIGITS)
-#define PW_EEPROM_ADDR_IMG_CHAR_FOuR    (PW_EEPROM_ADDR_IMG_DIGITS+4*PW_EEPROM_SIZE_IMG_DIGITS)
+#define PW_EEPROM_ADDR_IMG_CHAR_FOUR    (PW_EEPROM_ADDR_IMG_DIGITS+4*PW_EEPROM_SIZE_IMG_DIGITS)
 #define PW_EEPROM_ADDR_IMG_CHAR_FIVE    (PW_EEPROM_ADDR_IMG_DIGITS+5*PW_EEPROM_SIZE_IMG_DIGITS)
 #define PW_EEPROM_ADDR_IMG_CHAR_SIX     (PW_EEPROM_ADDR_IMG_DIGITS+6*PW_EEPROM_SIZE_IMG_DIGITS)
 #define PW_EEPROM_ADDR_IMG_CHAR_SEVEN   (PW_EEPROM_ADDR_IMG_DIGITS+7*PW_EEPROM_SIZE_IMG_DIGITS)
@@ -520,8 +520,8 @@
 #define PW_EEPROM_SIZE_EVENT_LOG_SINGLE 136
 #define PW_EEPROM_ADDR_TEAM_DATA_STAGING 0xd480  // team data written here before walk start action. struct teamdata
 #define PW_EEPROM_SIZE_TEAM_DATA_STAGING 640
-#define PW_EEPROM_ADDR_SCENARIo_DATA_STAGING 0xd700 // scenario data written here before walk start action. everything that 0x8F00-0xB7FF would have
-#define PW_EEPROM_SIZE_SCENARIo_DATA_STAGING 8184
+#define PW_EEPROM_ADDR_SCENARIO_DATA_STAGING 0xd700 // scenario data written here before walk start action. everything that 0x8F00-0xB7FF would have
+#define PW_EEPROM_SIZE_SCENARIO_DATA_STAGING 8184
 #define PW_EEPROM_ADDR_CURRENT_PEER_TEAM_DATA 0xdc00  // current peer play peer. struct teamdata. uploaded as part of peer play. later shifted to index [0] at 0xde24 list of peers
 #define PW_EEPROM_SIZE_CURRENT_PEER_TEAM_DATA 548
 #define PW_EEPROM_ADDR_MET_PEER_DATA 0xde24  // peers we've met. for battle house info. newest element is first. 10x struct teamdata

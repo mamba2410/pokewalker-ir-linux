@@ -15,10 +15,10 @@ int pw_ir_read(uint8_t *buf, size_t max_len) {
 
     int total_read = read(ir_fd, buf, max_len);
 
-    //printf("\tread:  ");
-    //for(size_t i = 0; i < total_read; i++)
-    //    printf("%02x", buf[i]^0xaa);
-    //printf("\n");
+    printf("\tread:  ");
+    for(size_t i = 0; i < total_read; i++)
+        printf("%02x", buf[i]^0xaa);
+    printf("\n");
 
     return total_read;
 }
@@ -27,10 +27,10 @@ int pw_ir_write(uint8_t *buf, size_t len) {
 
     int total_written = write(ir_fd, buf, len);
 
-    //printf("\twrite: ");
-    //for(size_t i = 0; i < len; i++)
-    //    printf("%02x", buf[i]^0xaa);
-    //printf("\n");
+    printf("\twrite: ");
+    for(size_t i = 0; i < len; i++)
+        printf("%02x", buf[i]^0xaa);
+    printf("\n");
 
     return total_written;
 }

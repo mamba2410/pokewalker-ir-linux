@@ -1,7 +1,9 @@
 #include <stdio.h>
 
+#include "eeprom_map.h"
 #include "pw_ir.h"
 #include "pw_ir_actions.h"
+#include "eeprom.h"
 
 
 ir_err_t pw_action_listen_and_advertise(uint8_t *rx, size_t *pn_read, uint8_t *padvertising_attempts) {
@@ -117,23 +119,131 @@ ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len) {
     return IR_OK;
 }
 
+/*
+ *  Sequence:
+ *  send CMD_PEER_PLAY_START
+ *  recv CMD_PEER_PLAY_RSP
+ *  send master EEPROM:0x91BE to slave EEPROM:0xF400
+ *  send master EEPROM:0xCC00 to slave EEPROM:0xDC00
+ *  read slave EEPROM:0x91BE to master EEPROM:0xF400
+ *  read slave EEPROM:0xCC00 to master EEPROM:0xDC00
+ *  send CMD_PEER_PLAY_DX
+ *  recv CMD_PEER_PLAY_DX ?
+ *  write data to master EEPROM:0xF6C0
+ *  send CMD_PEER_PLAY_END
+ *  recv CMD_PEER_PLAY_END
+ *  display animation
+ *  calculate gift
+ */
+ir_err_t pw_action_peer_play(comm_substate_t *psubstate, uint8_t *packet, size_t max_len) {
+    ir_err_t err = IR_ERR_GENERAL;
+    size_t n_read;
 
-ir_err_t pw_action_peer_play(comm_substate_t *psubstate) {
+    switch(*psubstate) {
+        case COMM_SUBSTATE_START_PEER_PLAY: {
+            printf("Starting peer play!\n");
+            packet[0] = CMD_PEER_PLAY_START;
+            packet[1] = EXTRA_BYTE_TO_WALKER;
+            //pw_eeprom_reliable_read(PW_EEPROM_ADDR_IDENTITY_DATA_1, PW_EEPROM_ADDR_IDENTITY_DATA_2,
+            //        packet+8, PW_EEPROM_SIZE_IDENTITY_DATA_1);
+            pw_eeprom_read(PW_EEPROM_ADDR_IDENTITY_DATA_1, packet+8, PW_EEPROM_SIZE_IDENTITY_DATA_1);
+            err = pw_ir_send_packet(packet, 8+PW_EEPROM_SIZE_IDENTITY_DATA_1, &n_read);
+            printf("wrote %lu bytes\n", n_read);
 
-    // send CMD_PEER_PLAY_START
-    // recv CMD_PEER_PLAY_RSP
-    // send master EEPROM:0x91BE to slave EEPROM:0xF400
-    // send master EEPROM:0xCC00 to slave EEPROM:0xDC00
-    // read slave EEPROM:0x91BE to master EEPROM:0xF400
-    // read slave EEPROM:0xCC00 to master EEPROM:0xDC00
-    // send CMD_PEER_PLAY_DX
-    // recv CMD_PEER_PLAY_DX ?
-    // write data to master EEPROM:0xF6C0
-    // send CMD_PEER_PLAY_END
-    // recv CMD_PEER_PLAY_END
-    // display animation
-    // calculate gift
+            if(err != IR_OK) return err;
+            *psubstate = COMM_SUBSTATE_PEER_PLAY_ACK;
+            break;
+        }
+        case COMM_SUBSTATE_PEER_PLAY_ACK: {
+            printf("Awaiting response\n");
+            err = pw_ir_recv_packet(packet, 8+PW_EEPROM_SIZE_IDENTITY_DATA_1, &n_read);
+            printf("Got peer play resp\n");
 
-    return IR_OK;
+            if(err != IR_OK) return err;
+            if(packet[0] != CMD_PEER_PLAY_RSP) return IR_ERR_UNEXPECTED_PACKET;
+
+            printf("Peer play resp ok\n");
+
+            // TODO: cast to identity_data_t struct
+
+            usleep(3000);
+            packet[0] = CMD_PEER_PLAY_DX;
+            packet[1] = 1;
+
+            // TODO: Actually make proper peer_play_data_t
+            packet[0x08] = 0x0f;    // current steps = 9999
+            packet[0x09] = 0x27;
+            packet[0x0a] = 0;
+            packet[0x0b] = 0;
+            packet[0x0c] = 0x0f;    // current watts = 9999
+            packet[0x0d] = 0x27;
+            // 0x0e, 0x0f padding
+            packet[0x10] = 1;   // identity_data_t.unk0
+            packet[0x11] = 0;
+            packet[0x12] = 0;
+            packet[0x13] = 0;
+            packet[0x14] = 7;   // identity_data_t.unk2
+            packet[0x15] = 0;
+            // species
+            pw_eeprom_read(PW_EEPROM_ADDR_ROUTE_INFO+0, packet+0x16, 2);
+            // 22 bytes pokemon nickname
+            pw_eeprom_read(PW_EEPROM_ADDR_ROUTE_INFO+10, packet+0x18, 22);
+            // 16 bytes trainer name
+            pw_eeprom_read(PW_EEPROM_ADDR_IDENTITY_DATA_1+72, packet+0x2e, 16);
+            // 1 byte pokemon gender
+            pw_eeprom_read(PW_EEPROM_ADDR_ROUTE_INFO+13, packet+0x3e, 1);
+            // 1 byte pokeIsSpecial
+            pw_eeprom_read(PW_EEPROM_ADDR_ROUTE_INFO+14, packet+0x3f, 1);
+
+            // send
+            err = pw_ir_send_packet(packet, 0x40, &n_read);;
+            if(err != IR_OK) return err;
+
+            printf("Done sending DX, moving on\n");
+            *psubstate = COMM_SUBSTATE_SEND_MASTER_SPRITES;
+
+            break;
+        }
+        case COMM_SUBSTATE_SEND_MASTER_SPRITES: {
+            break;
+        }
+        case COMM_SUBSTATE_SEND_MASTER_TEAMDATA: {
+            break;
+        }
+        case COMM_SUBSTATE_READ_SLAVE_SPRITES: {
+            break;
+        }
+        case COMM_SUBSTATE_READ_SLAVE_TEAMDATA: {
+            break;
+        }
+        case COMM_SUBSTATE_SEND_PEER_PLAY_DX: {
+            break;
+        }
+        case COMM_SUBSTATE_RECV_PEER_PLAY_DX: {
+            break;
+        }
+        case COMM_SUBSTATE_WRITE_PEER_PLAY_DATA: {
+            break;
+        }
+        case COMM_SUBSTATE_SEND_PEER_PLAY_END: {
+            break;
+        }
+        case COMM_SUBSTATE_RECV_PEER_PLAY_END: {
+            break;
+        }
+        case COMM_SUBSTATE_DISPLAY_PEER_PLAY_ANIMATION: {
+            break;
+        }
+        case COMM_SUBSTATE_CALCULATE_PEER_PLAY_GIFT: {
+            break;
+        }
+        default:
+            // die
+            printf("Unknown state\n");
+            break;
+    }
+
+
+    return err;
 }
 
