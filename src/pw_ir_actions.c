@@ -243,9 +243,8 @@ ir_err_t pw_action_peer_play(comm_substate_t *psubstate, uint8_t *counter, uint8
             if(cur_read_size >= PW_EEPROM_SIZE_IMG_POKEMON_SMALL_ANIMATED) {
                 printf("Done reading peer teamdata\n");
                 *counter = 0;
-                //*psubstate = COMM_SUBSTATE_SEND_PEER_PLAY_DX;
-                *psubstate = COMM_SUBSTATE_NONE;
-                err = IR_ERR_GENERAL;
+                *psubstate = COMM_SUBSTATE_SEND_PEER_PLAY_DX;
+                //*psubstate = COMM_SUBSTATE_NONE;
             }
             break;
         }
@@ -283,18 +282,31 @@ ir_err_t pw_action_peer_play(comm_substate_t *psubstate, uint8_t *counter, uint8
             if(err != IR_OK) return err;
 
             printf("Done sending DX, moving on\n");
+            *psubstate = COMM_SUBSTATE_RECV_PEER_PLAY_DX;
             break;
         }
         case COMM_SUBSTATE_RECV_PEER_PLAY_DX: {
-            break;
-        }
-        case COMM_SUBSTATE_WRITE_PEER_PLAY_DATA: {
+            err = pw_ir_recv_packet(packet, 0x40, &n_read);
+            if(err != IR_OK) return err;
+
+            // TODO: Write data to EEPROM:0xf6c0
+
+            *psubstate = COMM_SUBSTATE_SEND_PEER_PLAY_END;
             break;
         }
         case COMM_SUBSTATE_SEND_PEER_PLAY_END: {
+            packet[0] = CMD_PEER_PLAY_END;
+            packet[1] = EXTRA_BYTE_TO_WALKER;
+            err = pw_ir_send_packet(packet, 8, &n_read);
+
+            *psubstate = COMM_SUBSTATE_RECV_PEER_PLAY_END;
             break;
         }
         case COMM_SUBSTATE_RECV_PEER_PLAY_END: {
+            err = pw_ir_recv_packet(packet, 8, &n_read);
+            if(err != IR_OK) return err;
+            if(packet[0] != CMD_PEER_PLAY_END) return IR_ERR_UNEXPECTED_PACKET;
+            *psubstate = COMM_SUBSTATE_DISPLAY_PEER_PLAY_ANIMATION;
             break;
         }
         case COMM_SUBSTATE_DISPLAY_PEER_PLAY_ANIMATION: {
