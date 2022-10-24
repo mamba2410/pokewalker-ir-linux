@@ -135,7 +135,7 @@ ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len) {
  *  display animation
  *  calculate gift
  */
-ir_err_t pw_action_peer_play(comm_substate_t *psubstate, uint8_t *packet, size_t max_len) {
+ir_err_t pw_action_peer_play(comm_substate_t *psubstate, uint8_t *counter, uint8_t *packet, size_t max_len) {
     ir_err_t err = IR_ERR_GENERAL;
     size_t n_read;
 
@@ -143,7 +143,7 @@ ir_err_t pw_action_peer_play(comm_substate_t *psubstate, uint8_t *packet, size_t
         case COMM_SUBSTATE_START_PEER_PLAY: {
             printf("Starting peer play!\n");
             packet[0] = CMD_PEER_PLAY_START;
-            packet[1] = EXTRA_BYTE_TO_WALKER;
+            packet[1] = EXTRA_BYTE_FROM_WALKER;
             //pw_eeprom_reliable_read(PW_EEPROM_ADDR_IDENTITY_DATA_1, PW_EEPROM_ADDR_IDENTITY_DATA_2,
             //        packet+8, PW_EEPROM_SIZE_IDENTITY_DATA_1);
             pw_eeprom_read(PW_EEPROM_ADDR_IDENTITY_DATA_1, packet+8, PW_EEPROM_SIZE_IDENTITY_DATA_1);
@@ -164,8 +164,56 @@ ir_err_t pw_action_peer_play(comm_substate_t *psubstate, uint8_t *packet, size_t
 
             printf("Peer play resp ok\n");
 
-            // TODO: cast to identity_data_t struct
+            *psubstate = COMM_SUBSTATE_SEND_MASTER_SPRITES;
+            *counter = 0;
 
+            break;
+        }
+        case COMM_SUBSTATE_SEND_MASTER_SPRITES: {
+
+            size_t cur_write_size   = (size_t)(*counter) * 128;
+
+            err = pw_action_send_large_data_from_eeprom(
+                    PW_EEPROM_ADDR_IMG_POKEMON_SMALL_ANIMATED,              // src
+                    PW_EEPROM_ADDR_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL, // dst
+                    PW_EEPROM_SIZE_IMG_POKEMON_SMALL_ANIMATED, // size
+                    counter, packet, max_len
+                    );
+
+            if(cur_write_size >= PW_EEPROM_SIZE_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL){
+                *counter = 0;
+                *psubstate = COMM_SUBSTATE_SEND_MASTER_TEAMDATA;
+                printf("Moving on to write team data\n");
+            }
+            break;
+        }
+        case COMM_SUBSTATE_SEND_MASTER_TEAMDATA: {
+            size_t cur_write_size   = (size_t)(*counter) * 128;
+
+            err = pw_action_send_large_data_from_eeprom(
+                    PW_EEPROM_ADDR_TEAM_DATA_STRUCT,            // src
+                    PW_EEPROM_ADDR_CURRENT_PEER_TEAM_DATA,      // dst
+                    PW_EEPROM_SIZE_TEAM_DATA_STRUCT,            // size
+                    counter, packet, max_len
+                    );
+
+            if(cur_write_size >= PW_EEPROM_SIZE_TEAM_DATA_STRUCT){
+                *counter = 0;
+                *psubstate = COMM_SUBSTATE_READ_SLAVE_SPRITES;
+                printf("Moving on to read slave sprites\n");
+            }
+            break;
+        }
+        case COMM_SUBSTATE_READ_SLAVE_SPRITES: {
+            break;
+        }
+        case COMM_SUBSTATE_READ_SLAVE_TEAMDATA: {
+            break;
+        }
+        case COMM_SUBSTATE_SEND_PEER_PLAY_DX: {
+            break;
+        }
+        case COMM_SUBSTATE_RECV_PEER_PLAY_DX: {
             usleep(3000);
             packet[0] = CMD_PEER_PLAY_DX;
             packet[1] = 1;
@@ -200,26 +248,6 @@ ir_err_t pw_action_peer_play(comm_substate_t *psubstate, uint8_t *packet, size_t
             if(err != IR_OK) return err;
 
             printf("Done sending DX, moving on\n");
-            *psubstate = COMM_SUBSTATE_SEND_MASTER_SPRITES;
-
-            break;
-        }
-        case COMM_SUBSTATE_SEND_MASTER_SPRITES: {
-            break;
-        }
-        case COMM_SUBSTATE_SEND_MASTER_TEAMDATA: {
-            break;
-        }
-        case COMM_SUBSTATE_READ_SLAVE_SPRITES: {
-            break;
-        }
-        case COMM_SUBSTATE_READ_SLAVE_TEAMDATA: {
-            break;
-        }
-        case COMM_SUBSTATE_SEND_PEER_PLAY_DX: {
-            break;
-        }
-        case COMM_SUBSTATE_RECV_PEER_PLAY_DX: {
             break;
         }
         case COMM_SUBSTATE_WRITE_PEER_PLAY_DATA: {
@@ -243,6 +271,44 @@ ir_err_t pw_action_peer_play(comm_substate_t *psubstate, uint8_t *packet, size_t
             break;
     }
 
+
+    return err;
+}
+
+
+/*
+ *  Send an eeprom section from `src` on host to `dst` on peer.
+ *  Assumes `dst` is 128-byte aligned and write size is a multiple of 128-bytes
+ *
+ *  Designed to be run in a loop, hence only one read and one write.
+ */
+ir_err_t pw_action_send_large_data_from_eeprom(uint16_t src, uint16_t dst, size_t final_write_size,
+        uint8_t *pcounter, uint8_t *packet, size_t max_len) {
+    ir_err_t err = IR_ERR_GENERAL;
+
+    size_t cur_write_size   = (size_t)(*pcounter) * 128;
+    uint16_t cur_write_addr = dst + cur_write_size;
+    uint16_t cur_read_addr  = src + cur_write_size;
+    size_t n_read = 0;
+
+    // If we have written something, we expect an acknowledgment
+    if(cur_write_size > 0) {
+        err = pw_ir_recv_packet(packet, 8, &n_read);
+        if(err != IR_OK) return err;
+        if(packet[0] != CMD_EEPROM_WRITE_ACK) return IR_ERR_UNEXPECTED_PACKET;
+    }
+
+    if( cur_write_size < final_write_size) {
+        // On odd counters, we write on 0x80 blocks
+        // on even counters we write on 0x00 blocks
+        //packet[0] = (*counter%2)?CMD_EEPROM_WRITE_RAW_00:CMD_EEPROM_WRITE_RAW_80;
+        packet[0] = (uint8_t)(cur_write_addr&0xff);
+        packet[1] = (uint8_t)(cur_write_addr>>8);
+        pw_eeprom_read(cur_read_addr, packet+8, 128);
+
+        err = pw_ir_send_packet(packet, 8+128, &n_read);
+        (*pcounter)++;
+    }
 
     return err;
 }

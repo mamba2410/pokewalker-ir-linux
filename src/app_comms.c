@@ -11,6 +11,7 @@
 
 static comm_substate_t g_comm_substate = COMM_SUBSTATE_NONE;
 static uint8_t g_advertising_attempts = 0;
+static uint8_t g_comm_loop_counter = 0;
 
 void pw_comms_init() {
     pw_ir_set_comm_state(COMM_STATE_AWAITING);
@@ -45,7 +46,7 @@ void pw_comms_event_loop() {
                 printf("We are master!\n");
             }
             // only thing we can do is ask for peer play
-            err = pw_action_peer_play(&g_comm_substate, rx_buf, PW_RX_BUF_LEN);
+            err = pw_action_peer_play(&g_comm_substate, &g_comm_loop_counter, rx_buf, PW_RX_BUF_LEN);
 
             //rx_buf[0] = CMD_PING;
             //rx_buf[1] = EXTRA_BYTE_FROM_WALKER;
