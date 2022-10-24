@@ -12,8 +12,12 @@
 #include "pw_ir_actions.h"
 #include "eeprom_map.h"
 
+void run_comms_loop();
+void dump_rom(uint64_t which, const char* fname);
 
-ir_err_t dump_64k_rom();
+ir_err_t dump_64k_rom(const char* fname);
+ir_err_t dump_48k_rom(const char* fname);
+void print_packet(uint8_t *buf, size_t len);
 
 /*
  *  Shell code taken from Dmitry GR
@@ -43,6 +47,7 @@ static const uint8_t trigger_uploaded_code_upload_to_0xF7E0[] = {
 };
 const size_t triggercode_size = sizeof(trigger_uploaded_code_upload_to_0xF7E0);
 
+
 void print_packet(uint8_t *buf, size_t len) {
     size_t i;
     for(i = 0; i < 8; i++) {
@@ -61,17 +66,15 @@ void run_comms_loop() {
     // Run our comms loop
     do {
         pw_comms_event_loop();
-    //} while( (cs=pw_ir_get_comm_state()) == COMM_STATE_AWAITING );
     } while( (cs=pw_ir_get_comm_state()) != COMM_STATE_DISCONNECTED );
 }
 
-void dump_rom() {
+void dump_rom(uint64_t which, const char* fname) {
     comm_state_t cs = COMM_STATE_DISCONNECTED;
     ir_err_t err;
 
     do {
         pw_comms_event_loop();
-    //} while( (cs=pw_ir_get_comm_state()) == COMM_STATE_AWAITING );
     } while( (cs=pw_ir_get_comm_state()) == COMM_STATE_AWAITING );
 
     switch(cs) {
@@ -79,7 +82,16 @@ void dump_rom() {
             printf("Attempting dump.\n");
 
             // try our action
-            err = dump_64k_rom();
+            switch(which) {
+                case 48: err = dump_48k_rom(fname); break;
+                case 64: err = dump_64k_rom(fname); break;
+                default: {
+                    printf("Valid options 64 or 48, not %lu\n", which);
+                    err = IR_ERR_GENERAL;
+                    break;
+                }
+            }
+
             if(err != IR_OK)
                 printf("Error code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
 
@@ -100,60 +112,6 @@ void dump_rom() {
     }
 }
 
-void test() {
-    comm_state_t cs = COMM_STATE_DISCONNECTED;
-    ir_err_t err;
-    uint8_t counter = 0;
-    uint8_t packet[128+8];
-    size_t max_len = 128+8;
-
-    do {
-        pw_comms_event_loop();
-    //} while( (cs=pw_ir_get_comm_state()) == COMM_STATE_AWAITING );
-    } while( (cs=pw_ir_get_comm_state()) == COMM_STATE_AWAITING );
-
-    struct timeval now, last;
-
-    switch(cs) {
-        case COMM_STATE_MASTER: {
-            printf("Attempting dump.\n");
-
-            // try our action
-            size_t read_size = 56;
-            do {
-    gettimeofday(&now, NULL);
-    uint64_t t = (now.tv_sec - last.tv_sec)*1000000 + (now.tv_usec - last.tv_usec);
-    printf("loop took %lu us\n", t);
-    last = now;
-                err = pw_action_read_large_raw_data_from_eeprom(
-                    //PW_EEPROM_ADDR_IMG_POKEMON_SMALL_ANIMATED,              // src
-                    //PW_EEPROM_ADDR_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL, // dst
-                    //PW_EEPROM_SIZE_IMG_POKEMON_SMALL_ANIMATED, // size
-                    0, 0, 0xffff,
-                    read_size, &counter, packet, max_len
-                    );
-
-                if(err != IR_OK)
-                    printf("Error code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
-                counter++;
-            } while(counter < 254);
-
-            break;
-        }
-        case COMM_STATE_SLAVE: {
-            printf("We ended up as slave, aborting.\n");
-            break;
-        }
-        case COMM_STATE_DISCONNECTED: {
-            printf("Cannot connect to walker.\n");
-            break;
-        }
-        default: {
-            printf("Unknown state %d, aborting.\n", cs);
-            break;
-        }
-    }
-}
 
 int main(int argc, char** argv){
 
@@ -161,8 +119,8 @@ int main(int argc, char** argv){
     pw_eeprom_raw_init();
     pw_comms_init();
 
-    //dump_rom();
-    //test();
+    //dump_rom(48, "./flashrom.bin");
+    //dump_rom(64, "./eeprom.bin");
     run_comms_loop();
 
     // safely shut down IR
@@ -171,12 +129,12 @@ int main(int argc, char** argv){
 	return 0;
 }
 
-ir_err_t dump_64k_rom() {
+ir_err_t dump_64k_rom(const char* fname) {
     ir_err_t err;
     uint8_t rom_buf[0x88];
     size_t n_read = 0;
 
-    FILE *fp = fopen("./eeprom.bin", "wb");
+    FILE *fp = fopen(fname, "wb");
     if(!fp) {
         printf("Error: can't open file\n");
         return IR_ERR_GENERAL;
@@ -184,11 +142,11 @@ ir_err_t dump_64k_rom() {
 
     uint8_t packet[11];
 
-    size_t step = 56; // 64-byte serial buffer :()
+    size_t step = 56; // 64-byte serial buffer :(
     size_t read_size = 64*1024;
 
     for(size_t i = 0; i < read_size; i+=step) {
-        printf("Reading address: %04x\n", i);
+        printf("Reading address: %04lx\n", i);
         uint8_t read_len = ((read_size-i)>step)?step:read_size-i;
 
         // TODO: Ask for eeprom read
@@ -199,54 +157,54 @@ ir_err_t dump_64k_rom() {
         packet[10] = (uint8_t)read_len;
 
         err = pw_ir_send_packet(packet, 11, &n_read);
-        if(err != IR_OK) {
-            printf("Error code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
-            break;
-        }
+        if(err != IR_OK) break;
 
         // hacky way to get around 64-byte rx buffer
         err = pw_ir_recv_packet(rom_buf, read_len+8, &n_read);
 
         // Responses are VALID packets
-        if(err != IR_OK) {
-            printf("Error code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
-            break;
-        }
+        if(err != IR_OK) break;
 
         fwrite(rom_buf+8, 1, read_len, fp);
     }
 
-    printf("Dump success!\n");
+    if(err == IR_OK) {
+        printf("Dump success!\n");
+    } else {
+        printf("Dump failed\n");
+        printf("\tError code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
+    }
+
     fclose(fp);
-    return IR_OK;
+    return err;
 
 }
 
 
-ir_err_t dump_48k_rom() {
+ir_err_t dump_48k_rom(const char* fname) {
     ir_err_t err;
     uint8_t *buf = malloc(shellcode_size+8);
     size_t n_read = 0;
 
     memcpy(buf+8, rom_dump_exploit_upload_to_0xF956, shellcode_size);
+
     buf[0] = 0x06;
     buf[1] = 0xf9;
-
     err = pw_ir_send_packet(buf, shellcode_size+8, &n_read);
     if(err != IR_OK) printf("Error uploading shellcode: %s\n", PW_IR_ERR_NAMES[err]);
-
     printf("Sent shellcode\n");
-    usleep(1000);
+
+    pw_ir_delay_ms(1);
+
     err = pw_ir_recv_packet(buf, 8, &n_read);
     if(err != IR_OK) printf("Error in shellcode ack: %s\n", PW_IR_ERR_NAMES[err]);
-
     printf("Recv shellcode ack\n");
 
+    pw_ir_delay_ms(1);
     memcpy(buf+8, trigger_uploaded_code_upload_to_0xF7E0, triggercode_size);
+
     buf[0] = 0x06;
     buf[1] = 0xf7;
-
-    usleep(1000);
     err = pw_ir_send_packet(buf, triggercode_size+8, &n_read);
     if(err != IR_OK) printf("Error uploading shellcode: %s\n", PW_IR_ERR_NAMES[err]);
     printf("Sent trigger code\n");
@@ -256,41 +214,38 @@ ir_err_t dump_48k_rom() {
     if(err != IR_OK) printf("Error in triggercode ack: %s\n", PW_IR_ERR_NAMES[err]);
     printf("Recv trigger ack\n");
 
-    FILE *fp = fopen("./rom.bin", "wb");
+    FILE *fp = fopen(fname, "wb");
     if(!fp) {
         printf("Error: can't open file\n");
-        return err;
+        return IR_ERR_GENERAL;
     }
 
     uint8_t rom_buf[0x88];
 
     size_t step = 0x80;
-    size_t read_size = 0xc000;
-    //size_t read_size = 64*1024;
+    size_t read_size = 48*1024;
     for(size_t i = 0; i < read_size; i+=step) {
-        //usleep(500);
-        printf("Reading address: %04x\n", i);
+        printf("Reading address: %04lx\n", i);
 
         // hacky way to get around 64-byte rx buffer
         err = pw_ir_recv_packet(rom_buf, 8, &n_read);
-        err = pw_ir_recv_packet(rom_buf+8, 0x40, &n_read);
-        err = pw_ir_recv_packet(rom_buf+0x48, 0x40, &n_read);
+        (void)pw_ir_recv_packet(rom_buf+8, 0x40, &n_read);
+        (void)pw_ir_recv_packet(rom_buf+0x48, 0x40, &n_read);
 
         // if you can read that many in one go
         //err = pw_ir_recv_packet(rom_buf, 0x88);
 
-        /*
-        // Responses are invalid packets, do not check error
-        if(err != IR_OK) {
-            printf("Error code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
-            break;
-        }
-        */
-
+        if(err != IR_OK) break;
         fwrite(rom_buf+8, 1, step, fp);
     }
 
-    printf("Dump success!\n");
+    if(err == IR_OK) {
+        printf("Dump success!\n");
+    } else {
+        printf("Dump failed\n");
+        printf("\tError code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
+    }
+
     fclose(fp);
     return IR_OK;
 }

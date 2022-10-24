@@ -111,6 +111,7 @@ uint16_t pw_ir_checksum(uint8_t *packet, size_t len);
 void pw_ir_set_comm_state(comm_state_t s);
 comm_state_t pw_ir_get_comm_state();
 void pw_ir_die(const char* message);
+void pw_ir_delay_ms(size_t ms);
 
 
 #endif /* PW_IR_H */
