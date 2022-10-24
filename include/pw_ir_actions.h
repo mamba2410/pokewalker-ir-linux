@@ -34,7 +34,9 @@ ir_err_t pw_action_try_find_peer(uint8_t *packet, size_t packet_max,
 ir_err_t pw_action_peer_play(comm_substate_t *psubstate, uint8_t *pcounter, uint8_t *packet, size_t max_len);
 ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len);
 
-ir_err_t pw_action_send_large_data_from_eeprom(uint16_t src, uint16_t dst, size_t final_write_size,
-        uint8_t *pcounter, uint8_t *packet, size_t max_len);
+ir_err_t pw_action_send_large_raw_data_from_eeprom(uint16_t src, uint16_t dst, size_t final_write_size,
+        size_t write_size, uint8_t *pcounter, uint8_t *packet, size_t max_len);
+ir_err_t pw_action_read_large_raw_data_from_eeprom(uint16_t src, uint16_t dst, size_t final_read_size,
+        size_t read_size, uint8_t *pcounter, uint8_t *packet, size_t max_len);
 
 #endif /* PW_IR_ACTIONS_H */
