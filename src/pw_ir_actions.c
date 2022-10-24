@@ -1,7 +1,7 @@
 #include <stdio.h>
 
-#include <sys/time.h>
-#include <stdlib.h>
+#include <stdlib.h> // rand()
+#include <unistd.h> // usleep()
 
 #include "eeprom_map.h"
 #include "pw_ir.h"
@@ -9,6 +9,10 @@
 #include "eeprom.h"
 
 
+/*
+ *  Listen for a packet.
+ *  If we don't hear anything, send advertising byte
+ */
 ir_err_t pw_action_listen_and_advertise(uint8_t *rx, size_t *pn_read, uint8_t *padvertising_attempts) {
 
     ir_err_t err = pw_ir_recv_packet(rx, 8, pn_read);
@@ -38,61 +42,51 @@ ir_err_t pw_action_try_find_peer(uint8_t *packet, size_t packet_max,
     size_t n_read = 0;
 
     switch(*psubstate) {
-        case COMM_SUBSTATE_FINDING_PEER: {   // substate listen and advertise
+        case COMM_SUBSTATE_FINDING_PEER: {
+
             err = pw_action_listen_and_advertise(packet, &n_read, padvertising_attempts);
 
             switch(err) {
-                case IR_ERR_SIZE_MISMATCH:
+                case IR_ERR_SIZE_MISMATCH:  // also ok since we might recv 0xfc
                 case IR_OK:
                     // we got a valid packet back, now check if master or slave on next iteration
                     *psubstate = COMM_SUBSTATE_DETERMINE_ROLE;
-                    break;
-                case IR_ERR_TIMEOUT: // ignore timeout
-                    break;
-                case IR_ERR_ADVERTISING_MAX:
-                    // TODO: cannot connect
-                    //break;
-                default:
-                    // TODO: Handle error messages and quitting
-                    pw_ir_set_comm_state(COMM_STATE_DISCONNECTED);
-                    err = IR_ERR_GENERAL;
-                    break;
+                case IR_ERR_TIMEOUT: err = IR_OK; break; // ignore timeout
+                case IR_ERR_ADVERTISING_MAX: return IR_ERR_ADVERTISING_MAX;
+                default: return IR_ERR_GENERAL;
             }
 
             break;
         }
-        case COMM_SUBSTATE_DETERMINE_ROLE: {   // have peer, determine master/slave
+        case COMM_SUBSTATE_DETERMINE_ROLE: {
+
             // We should already have a response in the packet buffer
             switch(packet[0]) {
                 case CMD_ADVERTISING: // we found peer, we request master
                     packet[0x00] = CMD_ASSERT_MASTER;
                     packet[0x01] = EXTRA_BYTE_FROM_WALKER;
                     err = pw_ir_send_packet(packet, 8, &n_read);
+
                     *psubstate = COMM_SUBSTATE_AWAITING_SLAVE_ACK;
                     break;
                 case CMD_ASSERT_MASTER: // peer found us, peer requests master
                     packet[0x00] = CMD_SLAVE_ACK;
                     packet[0x01] = EXTRA_BYTE_FROM_WALKER;
                     err = pw_ir_send_packet(packet, 8, &n_read);
-                    // we acknowledge master, then wait for instructions
+
                     pw_ir_set_comm_state(COMM_STATE_SLAVE);
                     break;
-                default:
-                    pw_ir_set_comm_state(COMM_STATE_DISCONNECTED);
-                    return IR_ERR_UNEXPECTED_PACKET;
+                default: return IR_ERR_UNEXPECTED_PACKET;
             }
             break;
         }
-        case COMM_SUBSTATE_AWAITING_SLAVE_ACK: {   // we have sent master
+        case COMM_SUBSTATE_AWAITING_SLAVE_ACK: {   // we have sent master request
 
             // wait for answer
             err = pw_ir_recv_packet(packet, 8, &n_read);
             if(err != IR_OK) return err;
 
-            // expect CMD_SLAVE_ACK
-            if(packet[0] != CMD_SLAVE_ACK) {
-                return IR_ERR_UNEXPECTED_PACKET;
-            }
+            if(packet[0] != CMD_SLAVE_ACK) return IR_ERR_UNEXPECTED_PACKET;
 
             // combine keys
             for(int i = 0; i < 4; i++)
@@ -100,26 +94,28 @@ ir_err_t pw_action_try_find_peer(uint8_t *packet, size_t packet_max,
 
             // key exchange done, we are now master
             pw_ir_set_comm_state(COMM_STATE_MASTER);
-
             break;
         }
-        default: {
-            printf("In unknown substate: %d\n", *psubstate);
-            return IR_ERR_GENERAL;
-        }
-
+        default: return IR_ERR_UNKNOWN_SUBSTATE;
     }
-    return IR_OK;
+    return err;
 }
 
+
+/*
+ *  We are slave, given already recv'd packet, respond appropriately
+ */
 ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len) {
+
+    ir_err_t err;
 
     switch(packet[0]) {
         default:
-            return IR_ERR_GENERAL;
+            err = IR_ERR_NOT_IMPLEMENTED;
+            break;
     }
 
-    return IR_OK;
+    return err;
 }
 
 /*
@@ -151,6 +147,7 @@ ir_err_t pw_action_peer_play(comm_substate_t *psubstate, uint8_t *counter, uint8
                     packet+8, PW_EEPROM_SIZE_IDENTITY_DATA_1);
             packet[0x18] = (uint8_t)(rand()&0xff);  // Hack to change UID each time
                                                     // to prevent "alreadt connected" error
+                                                    // TODO: remove this in proper code
             err = pw_ir_send_packet(packet, 8+PW_EEPROM_SIZE_IDENTITY_DATA_1, &n_read);
             if(err != IR_OK) return err;
 
