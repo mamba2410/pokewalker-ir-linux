@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include <sys/time.h>
+#include <stdlib.h>
 
 #include "eeprom_map.h"
 #include "pw_ir.h"
@@ -143,50 +144,68 @@ ir_err_t pw_action_peer_play(comm_substate_t *psubstate, uint8_t *counter, uint8
 
     switch(*psubstate) {
         case COMM_SUBSTATE_START_PEER_PLAY: {
-            printf("Starting peer play!\n");
+
             packet[0] = CMD_PEER_PLAY_START;
             packet[1] = EXTRA_BYTE_FROM_WALKER;
-            //pw_eeprom_reliable_read(PW_EEPROM_ADDR_IDENTITY_DATA_1, PW_EEPROM_ADDR_IDENTITY_DATA_2,
-            //        packet+8, PW_EEPROM_SIZE_IDENTITY_DATA_1);
-            pw_eeprom_read(PW_EEPROM_ADDR_IDENTITY_DATA_1, packet+8, PW_EEPROM_SIZE_IDENTITY_DATA_1);
+            pw_eeprom_reliable_read(PW_EEPROM_ADDR_IDENTITY_DATA_1, PW_EEPROM_ADDR_IDENTITY_DATA_2,
+                    packet+8, PW_EEPROM_SIZE_IDENTITY_DATA_1);
+            packet[0x18] = (uint8_t)(rand()&0xff);  // Hack to change UID each time
+                                                    // to prevent "alreadt connected" error
             err = pw_ir_send_packet(packet, 8+PW_EEPROM_SIZE_IDENTITY_DATA_1, &n_read);
-            printf("wrote %lu bytes\n", n_read);
-
             if(err != IR_OK) return err;
+
             *psubstate = COMM_SUBSTATE_PEER_PLAY_ACK;
             break;
         }
         case COMM_SUBSTATE_PEER_PLAY_ACK: {
-            printf("Awaiting response\n");
-            err = pw_ir_recv_packet(packet, 8+PW_EEPROM_SIZE_IDENTITY_DATA_1, &n_read);
-            printf("Got peer play resp\n");
 
+            err = pw_ir_recv_packet(packet, 8+PW_EEPROM_SIZE_IDENTITY_DATA_1, &n_read);
             if(err != IR_OK) return err;
             if(packet[0] != CMD_PEER_PLAY_RSP) return IR_ERR_UNEXPECTED_PACKET;
-
-            printf("Peer play resp ok\n");
+            switch(packet[0]) {
+                case CMD_PEER_PLAY_RSP: break;
+                case CMD_PEER_PLAY_SEEN: return IR_ERR_PEER_ALREADY_SEEN;
+                default: return IR_ERR_UNEXPECTED_PACKET;
+            }
 
             *psubstate = COMM_SUBSTATE_SEND_MASTER_SPRITES;
             *counter = 0;
-
             break;
         }
         case COMM_SUBSTATE_SEND_MASTER_SPRITES: {
+
+            size_t write_size = 128;    // should always be 128-bytes
+            size_t cur_write_size   = (size_t)(*counter) * write_size;
+
+            err = pw_action_send_large_raw_data_from_eeprom(
+                        PW_EEPROM_ADDR_IMG_POKEMON_SMALL_ANIMATED,              // src
+                        PW_EEPROM_ADDR_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL, // dst
+                        PW_EEPROM_SIZE_IMG_POKEMON_SMALL_ANIMATED,              // size
+                        write_size, counter, packet, max_len
+                    );
+            if(err != IR_OK) return err;
+
+            if(cur_write_size >= PW_EEPROM_SIZE_IMG_POKEMON_SMALL_ANIMATED){
+                *counter = 0;
+                *psubstate = COMM_SUBSTATE_SEND_MASTER_NAME_IMAGE;
+            }
+            break;
+        }
+        case COMM_SUBSTATE_SEND_MASTER_NAME_IMAGE: {
 
             size_t write_size = 128;
             size_t cur_write_size   = (size_t)(*counter) * write_size;
 
             err = pw_action_send_large_raw_data_from_eeprom(
-                    PW_EEPROM_ADDR_IMG_POKEMON_SMALL_ANIMATED,              // src
-                    PW_EEPROM_ADDR_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL, // dst
-                    PW_EEPROM_SIZE_IMG_POKEMON_SMALL_ANIMATED, // size
-                    write_size, counter, packet, max_len
+                        PW_EEPROM_ADDR_TEXT_POKEMON_NAME,               // src
+                        PW_EEPROM_ADDR_TEXT_CURRENT_PEER_POKEMON_NAME,  // dst
+                        PW_EEPROM_SIZE_TEXT_POKEMON_NAME,               // size
+                        write_size, counter, packet, max_len
                     );
 
-            if(cur_write_size >= PW_EEPROM_SIZE_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL){
+            if(cur_write_size >= PW_EEPROM_SIZE_TEXT_POKEMON_NAME){
                 *counter = 0;
                 *psubstate = COMM_SUBSTATE_SEND_MASTER_TEAMDATA;
-                printf("Moving on to write team data\n");
             }
             break;
         }
@@ -194,57 +213,73 @@ ir_err_t pw_action_peer_play(comm_substate_t *psubstate, uint8_t *counter, uint8
 
             size_t write_size = 128;
             size_t cur_write_size   = (size_t)(*counter) * write_size;
+
             err = pw_action_send_large_raw_data_from_eeprom(
-                    PW_EEPROM_ADDR_TEAM_DATA_STRUCT,            // src
-                    PW_EEPROM_ADDR_CURRENT_PEER_TEAM_DATA,      // dst
-                    PW_EEPROM_SIZE_TEAM_DATA_STRUCT,            // size
-                    write_size, counter, packet, max_len
+                        PW_EEPROM_ADDR_TEAM_DATA_STRUCT,            // src
+                        PW_EEPROM_ADDR_CURRENT_PEER_TEAM_DATA,      // dst
+                        PW_EEPROM_SIZE_TEAM_DATA_STRUCT,            // size
+                        write_size, counter, packet, max_len
                     );
 
             if(cur_write_size >= PW_EEPROM_SIZE_TEAM_DATA_STRUCT){
                 *counter = 0;
                 *psubstate = COMM_SUBSTATE_READ_SLAVE_SPRITES;
-                printf("Moving on to read slave sprites\n");
             }
             break;
         }
         case COMM_SUBSTATE_READ_SLAVE_SPRITES: {
 
-            size_t read_size = 56;
+            size_t read_size = 56;  // NOTE: this can be anything so long as it fits in your buffer
+                                    // 56 becayse my Linux serial buffer is 64 bytes
+                                    // TODO: move this buffer dependancy inti pw_ir_read()
             err = pw_action_read_large_raw_data_from_eeprom(
-                    PW_EEPROM_ADDR_IMG_POKEMON_SMALL_ANIMATED,              // src
-                    PW_EEPROM_ADDR_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL, // dst
-                    PW_EEPROM_SIZE_IMG_POKEMON_SMALL_ANIMATED, // size
-                    read_size, counter, packet, max_len
+                        PW_EEPROM_ADDR_IMG_POKEMON_SMALL_ANIMATED,              // src
+                        PW_EEPROM_ADDR_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL, // dst
+                        PW_EEPROM_SIZE_IMG_POKEMON_SMALL_ANIMATED,              // size
+                        read_size, counter, packet, max_len
                     );
 
             size_t cur_read_size   = (size_t)(*counter) * read_size;
 
             if(cur_read_size >= PW_EEPROM_SIZE_IMG_POKEMON_SMALL_ANIMATED) {
-                printf("Done reading peer sprites\n");
+                *counter = 0;
+                *psubstate = COMM_SUBSTATE_READ_SLAVE_NAME_IMAGE;
+            }
+            break;
+        }
+        case COMM_SUBSTATE_READ_SLAVE_NAME_IMAGE: {
+
+            size_t read_size = 56;  // TODO: See above
+            err = pw_action_read_large_raw_data_from_eeprom(
+                        PW_EEPROM_ADDR_TEXT_POKEMON_NAME,               // src
+                        PW_EEPROM_ADDR_TEXT_CURRENT_PEER_POKEMON_NAME,  // dst
+                        PW_EEPROM_SIZE_TEXT_POKEMON_NAME,               // size
+                        read_size, counter, packet, max_len
+                    );
+
+            size_t cur_read_size   = (size_t)(*counter) * read_size;
+
+            if(cur_read_size >= PW_EEPROM_SIZE_IMG_POKEMON_SMALL_ANIMATED) {
                 *counter = 0;
                 *psubstate = COMM_SUBSTATE_READ_SLAVE_TEAMDATA;
             }
-
             break;
         }
         case COMM_SUBSTATE_READ_SLAVE_TEAMDATA: {
 
-            size_t read_size = 56;
+            size_t read_size = 56;  // TODO: See above
             err = pw_action_read_large_raw_data_from_eeprom(
-                    PW_EEPROM_ADDR_IMG_POKEMON_SMALL_ANIMATED,              // src
-                    PW_EEPROM_ADDR_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL, // dst
-                    PW_EEPROM_SIZE_IMG_POKEMON_SMALL_ANIMATED, // size
-                    read_size, counter, packet, max_len
+                        PW_EEPROM_ADDR_IMG_POKEMON_SMALL_ANIMATED,              // src
+                        PW_EEPROM_ADDR_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL, // dst
+                        PW_EEPROM_SIZE_IMG_POKEMON_SMALL_ANIMATED,              // size
+                        read_size, counter, packet, max_len
                     );
 
             size_t cur_read_size   = (size_t)(*counter) * read_size;
 
             if(cur_read_size >= PW_EEPROM_SIZE_IMG_POKEMON_SMALL_ANIMATED) {
-                printf("Done reading peer teamdata\n");
                 *counter = 0;
                 *psubstate = COMM_SUBSTATE_SEND_PEER_PLAY_DX;
-                //*psubstate = COMM_SUBSTATE_NONE;
             }
             break;
         }
@@ -277,11 +312,10 @@ ir_err_t pw_action_peer_play(comm_substate_t *psubstate, uint8_t *counter, uint8
             // 1 byte pokeIsSpecial
             pw_eeprom_read(PW_EEPROM_ADDR_ROUTE_INFO+14, packet+0x3f, 1);
 
-            // send
+            // TODO: move sizze to #define
             err = pw_ir_send_packet(packet, 0x40, &n_read);;
             if(err != IR_OK) return err;
 
-            printf("Done sending DX, moving on\n");
             *psubstate = COMM_SUBSTATE_RECV_PEER_PLAY_DX;
             break;
         }
@@ -289,7 +323,8 @@ ir_err_t pw_action_peer_play(comm_substate_t *psubstate, uint8_t *counter, uint8
             err = pw_ir_recv_packet(packet, 0x40, &n_read);
             if(err != IR_OK) return err;
 
-            // TODO: Write data to EEPROM:0xf6c0
+            // TODO: Not 0x80-byte aligned
+            pw_eeprom_write(PW_EEPROM_ADDR_CURRENT_PEER_DATA, packet, PW_EEPROM_SIZE_CURRENT_PEER_DATA);
 
             *psubstate = COMM_SUBSTATE_SEND_PEER_PLAY_END;
             break;
@@ -310,17 +345,17 @@ ir_err_t pw_action_peer_play(comm_substate_t *psubstate, uint8_t *counter, uint8
             break;
         }
         case COMM_SUBSTATE_DISPLAY_PEER_PLAY_ANIMATION: {
+            err = IR_ERR_NOT_IMPLEMENTED;
             break;
         }
         case COMM_SUBSTATE_CALCULATE_PEER_PLAY_GIFT: {
+            err = IR_ERR_NOT_IMPLEMENTED;
             break;
         }
         default:
-            // die
-            printf("Unknown state\n");
+            err = IR_ERR_UNKNOWN_SUBSTATE;
             break;
     }
-
 
     return err;
 }
