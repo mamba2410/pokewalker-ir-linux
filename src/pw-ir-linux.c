@@ -2,12 +2,15 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/time.h>
 
 #include "pw-ir-linux.h"
 #include "pw_ir.h"
 #include "driver_ir.h"
 #include "driver_eeprom_linux.h"
 #include "app_comms.h"
+#include "pw_ir_actions.h"
+#include "eeprom_map.h"
 
 
 ir_err_t dump_64k_rom();
@@ -97,13 +100,70 @@ void dump_rom() {
     }
 }
 
+void test() {
+    comm_state_t cs = COMM_STATE_DISCONNECTED;
+    ir_err_t err;
+    uint8_t counter = 0;
+    uint8_t packet[128+8];
+    size_t max_len = 128+8;
+
+    do {
+        pw_comms_event_loop();
+    //} while( (cs=pw_ir_get_comm_state()) == COMM_STATE_AWAITING );
+    } while( (cs=pw_ir_get_comm_state()) == COMM_STATE_AWAITING );
+
+    struct timeval now, last;
+
+    switch(cs) {
+        case COMM_STATE_MASTER: {
+            printf("Attempting dump.\n");
+
+            // try our action
+            size_t read_size = 56;
+            do {
+    gettimeofday(&now, NULL);
+    uint64_t t = (now.tv_sec - last.tv_sec)*1000000 + (now.tv_usec - last.tv_usec);
+    printf("loop took %lu us\n", t);
+    last = now;
+                err = pw_action_read_large_raw_data_from_eeprom(
+                    //PW_EEPROM_ADDR_IMG_POKEMON_SMALL_ANIMATED,              // src
+                    //PW_EEPROM_ADDR_IMG_CURRENT_PEER_POKEMON_ANIMATED_SMALL, // dst
+                    //PW_EEPROM_SIZE_IMG_POKEMON_SMALL_ANIMATED, // size
+                    0, 0, 0xffff,
+                    read_size, &counter, packet, max_len
+                    );
+
+                if(err != IR_OK)
+                    printf("Error code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
+                counter++;
+            } while(counter < 254);
+
+            break;
+        }
+        case COMM_STATE_SLAVE: {
+            printf("We ended up as slave, aborting.\n");
+            break;
+        }
+        case COMM_STATE_DISCONNECTED: {
+            printf("Cannot connect to walker.\n");
+            break;
+        }
+        default: {
+            printf("Unknown state %d, aborting.\n", cs);
+            break;
+        }
+    }
+}
+
 int main(int argc, char** argv){
 
     pw_ir_init();
     pw_eeprom_raw_init();
     pw_comms_init();
 
-    dump_rom();
+    //dump_rom();
+    //test();
+    run_comms_loop();
 
     // safely shut down IR
     pw_ir_deinit();

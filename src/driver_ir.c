@@ -17,19 +17,25 @@ int pw_ir_read(uint8_t *buf, size_t max_len) {
 
     struct timeval start, now;
     int bytes_available, total_read = 0;
+    uint64_t t;
 
     gettimeofday(&start, NULL);
 
     do {
         ioctl(ir_fd, FIONREAD, &bytes_available);
-        if(bytes_available > 0) printf("%d\n", bytes_available);
+        //if(bytes_available > 0) printf("%d\n", bytes_available);
         gettimeofday(&now, NULL);
-    } while( (bytes_available <= 0) && ( (now.tv_usec - start.tv_usec) < 500*1000) );
+        t = (now.tv_sec - start.tv_sec)*1000000 + (now.tv_usec - start.tv_usec);
+    } while( (bytes_available <= 0) && ( t < 500*1000) );
 
-    if(bytes_available > 0)
+    if(bytes_available > 0) {
         total_read = read(ir_fd, buf, max_len);
+        gettimeofday(&now, NULL);
+        t = (now.tv_sec - start.tv_sec)*1000000 + (now.tv_usec - start.tv_usec);
 
-    printf("\tread:  ");
+    }
+
+    printf("\tread: (%lu us)", t);
     for(size_t i = 0; i < total_read; i++) {
         if(i%8 == 0) printf(" ");
         if(i%16 == 0) printf("\n\t\t");
@@ -41,10 +47,14 @@ int pw_ir_read(uint8_t *buf, size_t max_len) {
 }
 
 int pw_ir_write(uint8_t *buf, size_t len) {
+    struct timeval start, now;
 
+    gettimeofday(&start, NULL);
     int total_written = write(ir_fd, buf, len);
+    gettimeofday(&now, NULL);
+    uint64_t t = (now.tv_sec - start.tv_sec)*1000000 + (now.tv_usec - start.tv_usec);
 
-    printf("\twrite: ");
+    printf("\twrite: (%lu us)", t);
     for(size_t i = 0; i < len; i++) {
         if(i%8 == 0) printf(" ");
         if(i%16 == 0) printf("\n\t\t");
@@ -106,10 +116,10 @@ int pw_ir_init() {
     // i.e. timeout 200ms after start of read
     // NOTE: behaviour needs testing, I don't know if it will break after the first byte or if it will
     // break if the timer runs out while there is still data incoming
-    //tty.c_cc[VTIME] = 2;    // max time between bytes = 200ms
-    //tty.c_cc[VMIN] = 0;     // min number of bytes per read is 0
     tty.c_cc[VTIME] = 2;    // max time between bytes = 200ms
-    tty.c_cc[VMIN] = 1;     // min number of bytes per read is 1
+    tty.c_cc[VMIN] = 0;     // min number of bytes per read is 0
+    //tty.c_cc[VTIME] = 2;    // max time between bytes = 200ms
+    //tty.c_cc[VMIN] = 1;     // min number of bytes per read is 1
 
     cfsetispeed(&tty, B115200);
     cfsetospeed(&tty, B115200);

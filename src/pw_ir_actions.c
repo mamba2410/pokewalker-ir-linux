@@ -1,5 +1,7 @@
 #include <stdio.h>
 
+#include <sys/time.h>
+
 #include "eeprom_map.h"
 #include "pw_ir.h"
 #include "pw_ir_actions.h"
@@ -241,7 +243,9 @@ ir_err_t pw_action_peer_play(comm_substate_t *psubstate, uint8_t *counter, uint8
             if(cur_read_size >= PW_EEPROM_SIZE_IMG_POKEMON_SMALL_ANIMATED) {
                 printf("Done reading peer teamdata\n");
                 *counter = 0;
-                *psubstate = COMM_SUBSTATE_SEND_PEER_PLAY_DX;
+                //*psubstate = COMM_SUBSTATE_SEND_PEER_PLAY_DX;
+                *psubstate = COMM_SUBSTATE_NONE;
+                err = IR_ERR_GENERAL;
             }
             break;
         }
@@ -332,6 +336,7 @@ ir_err_t pw_action_send_large_raw_data_from_eeprom(uint16_t src, uint16_t dst, s
         if(packet[0] != CMD_EEPROM_WRITE_ACK) return IR_ERR_UNEXPECTED_PACKET;
     }
 
+    usleep(4000);   // ESSENTIAL
     if( cur_write_size < final_write_size) {
         // On odd counters, we write on 0x80 blocks
         // on even counters we write on 0x00 blocks
@@ -358,15 +363,16 @@ ir_err_t pw_action_read_large_raw_data_from_eeprom(uint16_t src, uint16_t dst, s
         size_t read_size, uint8_t *pcounter, uint8_t *packet, size_t max_len) {
 
     ir_err_t err;
-    size_t cur_read_size   = (size_t)(*pcounter) * 128;
+    size_t cur_read_size   = (size_t)(*pcounter) * read_size;
     uint16_t cur_write_addr = dst + cur_read_size;
     uint16_t cur_read_addr  = src + cur_read_size;
     size_t n_read = 0;
 
     size_t remaining_read = final_read_size - cur_read_size;
+    printf("%lu bytes remaining\n", remaining_read);
     if(remaining_read <= 0) return IR_OK;
 
-    //uint8_t read_size = (remaining_read<56)?remaining_read:56;
+    read_size = (remaining_read<read_size)?remaining_read:read_size;
 
     packet[0] = CMD_EEPROM_READ_REQ;;
     packet[1] = EXTRA_BYTE_TO_WALKER;
@@ -377,16 +383,16 @@ ir_err_t pw_action_read_large_raw_data_from_eeprom(uint16_t src, uint16_t dst, s
     err = pw_ir_send_packet(packet, 8+3, &n_read);
     if(err != IR_OK) return err;
 
-    usleep(3000);
+    usleep(4000);   // probably needed
     err = pw_ir_recv_packet(packet, read_size+8, &n_read);
-    printf("read %lu/%lu bytes\n", n_read, read_size+8);
+    //printf("read %lu/%lu bytes\n", n_read, read_size+8);
     if(err != IR_OK) return err;
     if(packet[0] != CMD_EEPROM_READ_RSP) return IR_ERR_UNEXPECTED_PACKET;
 
     pw_eeprom_write(cur_write_addr, packet+8, read_size);
 
-    if(cur_read_size)
     (*pcounter)++;
 
     return err;
 }
+
