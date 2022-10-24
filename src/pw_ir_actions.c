@@ -363,7 +363,7 @@ ir_err_t pw_action_peer_play(comm_substate_t *psubstate, uint8_t *counter, uint8
 
 /*
  *  Send an eeprom section from `src` on host to `dst` on peer.
- *  Assumes `dst` is 128-byte aligned and write size is a multiple of 128-bytes
+ *  Throws error if `dst` or `final_write_size` isn't 128-byte aligned
  *
  *  Designed to be run in a loop, hence only one read and one write.
  */
@@ -383,16 +383,19 @@ ir_err_t pw_action_send_large_raw_data_from_eeprom(uint16_t src, uint16_t dst, s
         if(packet[0] != CMD_EEPROM_WRITE_ACK) return IR_ERR_UNEXPECTED_PACKET;
     }
 
+    if( (cur_write_addr&0x07) > 0) return IR_ERR_UNALIGNED_WRITE;
+    if( (final_write_size&0x07) > 0) return IR_ERR_UNALIGNED_WRITE;
+
     usleep(4000);   // ESSENTIAL
+                    // TODO: create a pw_ir_delay_ms()
+
     if( cur_write_size < final_write_size) {
-        // On odd counters, we write on 0x80 blocks
-        // on even counters we write on 0x00 blocks
-        //packet[0] = (*counter%2)?CMD_EEPROM_WRITE_RAW_00:CMD_EEPROM_WRITE_RAW_80;
-        packet[0] = (uint8_t)(cur_write_addr&0xff) + 2; // Need +2 to make it raw write
+        packet[0] = (uint8_t)(cur_write_addr&0xff) + 2; // Need +2 to make it raw write command
         packet[1] = (uint8_t)(cur_write_addr>>8);
         pw_eeprom_read(cur_read_addr, packet+8, write_size);
 
         err = pw_ir_send_packet(packet, 8+write_size, &n_read);
+        if(err != IR_OK) return err;
         (*pcounter)++;
     }
 
@@ -401,8 +404,7 @@ ir_err_t pw_action_send_large_raw_data_from_eeprom(uint16_t src, uint16_t dst, s
 
 
 /*
- *  Send an eeprom section from `src` on peer to `dst` on host..
- *  Assumes `dst` is 128-byte aligned and write size is a multiple of 128-bytes
+ *  Send an eeprom section from `src` on peer to `dst` on host.
  *
  *  Designed to be run in a loop, hence only one read and one write.
  */
@@ -416,7 +418,6 @@ ir_err_t pw_action_read_large_raw_data_from_eeprom(uint16_t src, uint16_t dst, s
     size_t n_read = 0;
 
     size_t remaining_read = final_read_size - cur_read_size;
-    printf("%lu bytes remaining\n", remaining_read);
     if(remaining_read <= 0) return IR_OK;
 
     read_size = (remaining_read<read_size)?remaining_read:read_size;
@@ -431,8 +432,9 @@ ir_err_t pw_action_read_large_raw_data_from_eeprom(uint16_t src, uint16_t dst, s
     if(err != IR_OK) return err;
 
     usleep(4000);   // probably needed
+                    // TODO: See above
+
     err = pw_ir_recv_packet(packet, read_size+8, &n_read);
-    //printf("read %lu/%lu bytes\n", n_read, read_size+8);
     if(err != IR_OK) return err;
     if(packet[0] != CMD_EEPROM_READ_RSP) return IR_ERR_UNEXPECTED_PACKET;
 
@@ -440,6 +442,8 @@ ir_err_t pw_action_read_large_raw_data_from_eeprom(uint16_t src, uint16_t dst, s
 
     (*pcounter)++;
 
+    // TODO: create a new error for awaiting read/write?
     return err;
 }
+
 
