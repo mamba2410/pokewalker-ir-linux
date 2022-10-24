@@ -52,40 +52,24 @@ void print_packet(uint8_t *buf, size_t len) {
     printf("\n");
 }
 
-int main(int argc, char** argv){
-
-    pw_ir_init();
-    ir_err_t err;
+void run_comms_loop() {
     comm_state_t cs;
-
-    uint8_t buf[8];
-    memset(buf, 0, 8);
-
-    /*
-    err = pw_ir_recv_packet(buf, 8);
-    print_packet(buf, 8);
-
-
-    buf[0] = 0xfc^0xaa;
-    //pw_ir_send_packet(buf, 1);
-    //err = pw_ir_write(buf, 1);
-
-    usleep(5000);
-
-    err = pw_ir_recv_packet(buf, 8);
-    print_packet(buf, 8);
-    */
-
-    pw_comms_init();
-    pw_eeprom_raw_init();
 
     // Run our comms loop
     do {
         pw_comms_event_loop();
     //} while( (cs=pw_ir_get_comm_state()) == COMM_STATE_AWAITING );
     } while( (cs=pw_ir_get_comm_state()) != COMM_STATE_DISCONNECTED );
+}
 
-    return 0;
+void dump_rom() {
+    comm_state_t cs = COMM_STATE_DISCONNECTED;
+    ir_err_t err;
+
+    do {
+        pw_comms_event_loop();
+    //} while( (cs=pw_ir_get_comm_state()) == COMM_STATE_AWAITING );
+    } while( (cs=pw_ir_get_comm_state()) == COMM_STATE_AWAITING );
 
     switch(cs) {
         case COMM_STATE_MASTER: {
@@ -107,10 +91,19 @@ int main(int argc, char** argv){
             break;
         }
         default: {
-            printf("Unknown state, aborting.\n");
+            printf("Unknown state %d, aborting.\n", cs);
             break;
         }
     }
+}
+
+int main(int argc, char** argv){
+
+    pw_ir_init();
+    pw_eeprom_raw_init();
+    pw_comms_init();
+
+    dump_rom();
 
     // safely shut down IR
     pw_ir_deinit();

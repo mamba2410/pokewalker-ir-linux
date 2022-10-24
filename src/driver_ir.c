@@ -22,8 +22,9 @@ int pw_ir_read(uint8_t *buf, size_t max_len) {
 
     do {
         ioctl(ir_fd, FIONREAD, &bytes_available);
+        if(bytes_available > 0) printf("%d\n", bytes_available);
         gettimeofday(&now, NULL);
-    } while( (bytes_available <= 0) && (now.tv_usec - start.tv_usec < 500*1000) );
+    } while( (bytes_available <= 0) && ( (now.tv_usec - start.tv_usec) < 500*1000) );
 
     if(bytes_available > 0)
         total_read = read(ir_fd, buf, max_len);
