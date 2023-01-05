@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/time.h>
+#include <sys/stat.h>
 
 #include "pw-ir-linux.h"
 #include "pw_ir.h"
@@ -11,6 +12,8 @@
 #include "app_comms.h"
 #include "pw_ir_actions.h"
 #include "eeprom_map.h"
+#include "trainer_info.h"
+#include "special_things.h"
 
 void run_comms_loop();
 void dump_rom(uint64_t which, const char* fname);
@@ -48,6 +51,125 @@ static const uint8_t trigger_uploaded_code_upload_to_0xF7E0[] = {
 const size_t triggercode_size = sizeof(trigger_uploaded_code_upload_to_0xF7E0);
 
 
+int load_shellcode(uint8_t *buf, const char* fname, size_t len) {
+    FILE *f = fopen(fname, "r");
+    if(f == 0) return -1;
+
+    fread(buf, len, 1, f);
+
+    fclose(f);
+    return 0;
+}
+
+int send_shellcode(uint8_t *shellcode, size_t len) {
+    ir_err_t err;
+    uint8_t *buf = malloc(len+8);
+    size_t n_read = 0;
+
+    memcpy(buf+8+1, shellcode, len);
+
+    buf[0] = 0x06;
+    buf[1] = 0xf9;
+    buf[8] = 0x56;
+    print_packet(buf, len+8+1);
+    err = pw_ir_send_packet(buf, len+8+1, &n_read);
+    if(err != IR_OK) {
+    printf("Error uploading shellcode: %s\n", PW_IR_ERR_NAMES[err]);
+        print_packet(buf, n_read);
+        return -1;
+    }
+    printf("Sent shellcode\n");
+
+    pw_ir_delay_ms(1);
+
+    err = pw_ir_recv_packet(buf, 8, &n_read);
+    if(err != IR_OK) {
+        printf("Error in shellcode ack: %s\n", PW_IR_ERR_NAMES[err]);
+        print_packet(buf, n_read);
+        return -1;
+    }
+    printf("Recv shellcode ack\n");
+
+    pw_ir_delay_ms(1);
+    memcpy(buf+8, trigger_uploaded_code_upload_to_0xF7E0, triggercode_size);
+
+    buf[0] = 0x06;
+    buf[1] = 0xf7;
+    err = pw_ir_send_packet(buf, triggercode_size+8, &n_read);
+    if(err != IR_OK) printf("Error uploading shellcode: %s\n", PW_IR_ERR_NAMES[err]);
+    printf("Sent trigger code\n");
+
+
+    err = pw_ir_recv_packet(buf, 8, &n_read);
+    if(err != IR_OK) printf("Error in triggercode ack: %s\n", PW_IR_ERR_NAMES[err]);
+    printf("Recv trigger ack\n");
+
+    return 0;
+}
+
+int send_custom_event_pokemon(const char* sprite_file, const char* pokemon_name_file, const char* item_name_file) {
+    pokemon_summary_t ps = {
+        le_species: 0x004c, // 4a = geodude
+        le_held_item: 0x28, // 28 = potion
+        le_moves: {0x0021, 0x006f, 0, 0},   // 0x0021=tackle, 0x006f=def curl
+        level: 100,
+        pokemon_flags_1: 0x20,  // mask 0x20 = female
+        pokemon_flags_2: 0x02,  // mask 0x02 = shiny
+    };
+
+    special_pokemon_info_t sd = {
+        le_ot_tid: 44,
+        le_ot_sid: 55,
+        le_location_met: 1, // idfk
+        ot_name: {0x0137, 0x0145, 0x0151, 0x0146, 0x0145, 0xffff, 0, 0},    // Mamba
+        encounter_type: 0,  // 0 = fateful?
+        ability: 1, //
+        le_pokeball_item: 28, // potion (maybe breaks?)
+        le_unk1: 0,       // changes nature?
+        le_unk2: 0x7f,    // changes IVs?
+        unk3: {0xfc, 0xfc, 0x00, 0, 0, 0, 0, 0, 0, 0},
+    };
+
+    uint16_t item = 0x28; // 28 = potion  (given revive when tested??)
+
+
+    uint8_t *sprite=0, *pokemon_name=0, *item_name=0;
+
+    FILE *fp = fopen(sprite_file, "r");
+    if(!fp) return -1;
+    struct stat s;
+    if( stat(sprite_file, &s) == -1 ) return -1;
+    sprite = malloc(s.st_size);
+    fread(sprite, s.st_size, 1, fp);
+    fclose(fp);
+
+    fp = fopen(pokemon_name_file, "r");
+    if(!fp) return -1;
+    if( stat(pokemon_name_file, &s) == -1 ) return -1;
+    pokemon_name = malloc(s.st_size);
+    fread(pokemon_name, s.st_size, 1, fp);
+    fclose(fp);
+
+    fp = fopen(item_name_file, "r");
+    if(!fp) return -1;
+    if( stat(item_name_file, &s) == -1 ) return -1;
+    item_name = malloc(s.st_size);
+    fread(item_name, s.st_size, 1, fp);
+    fclose(fp);
+
+    ir_err_t err = send_event_data(
+        &ps, &sd, sprite, pokemon_name, item, item_name
+    );
+
+    if(err != IR_OK) {
+        printf("Error when sending special pokemon\n");
+        printf("Error code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
+        return -1;
+    }
+
+    return 0;
+}
+
 void print_packet(uint8_t *buf, size_t len) {
     size_t i;
     for(i = 0; i < 8; i++) {
@@ -67,6 +189,41 @@ void run_comms_loop() {
     do {
         pw_comms_event_loop();
     } while( (cs=pw_ir_get_comm_state()) != COMM_STATE_DISCONNECTED );
+}
+
+void full_send_shellcode(uint8_t *shellcode, size_t len) {
+    comm_state_t cs = COMM_STATE_DISCONNECTED;
+    ir_err_t err;
+
+    do {
+        pw_comms_event_loop();
+    } while( (cs=pw_ir_get_comm_state()) == COMM_STATE_AWAITING );
+
+    switch(cs) {
+        case COMM_STATE_MASTER: {
+            printf("Attempting to send shellcode.\n");
+
+            // try our action
+            err = send_shellcode(shellcode, len);
+
+            if(err != 0)
+                printf("Error: %d\n", err);
+
+            break;
+        }
+        case COMM_STATE_SLAVE: {
+            printf("We ended up as slave, aborting.\n");
+            break;
+        }
+        case COMM_STATE_DISCONNECTED: {
+            printf("Cannot connect to walker.\n");
+            break;
+        }
+        default: {
+            printf("Unknown state %d, aborting.\n", cs);
+            break;
+        }
+    }
 }
 
 void dump_rom(uint64_t which, const char* fname) {
@@ -119,9 +276,38 @@ int main(int argc, char** argv){
     pw_eeprom_raw_init();
     pw_comms_init();
 
-    //dump_rom(48, "./flashrom.bin");
-    //dump_rom(64, "./eeprom.bin");
-    run_comms_loop();
+    //dump_rom(48, "dumps/flashrom.bin");
+    //dump_rom(64, "dumps/electrode-full.bin");
+
+
+    //run_comms_loop();   // get handshake
+
+
+    comm_state_t cs;
+    do {
+        pw_comms_event_loop();
+    } while( (cs=pw_ir_get_comm_state()) != COMM_STATE_MASTER );
+
+    send_custom_event_pokemon("images/sprite.bin", "images/pokemon_name.bin", "images/item_name.bin");
+    /*
+    */
+
+    /*
+    size_t shellcode_len = 34;
+    uint8_t *shellcode = malloc(shellcode_len);
+    int err = load_shellcode(shellcode, "shellcode/max_steps.bin", shellcode_len);
+    if(err != 0) {
+        pw_ir_deinit();
+        printf("Error loading shellcode\n");
+        return -1;
+    }
+    printf("Loaded shellcode\n");
+
+    full_send_shellcode(shellcode, shellcode_len);
+
+    printf("Send shellcode\n");
+    */
+
 
     // safely shut down IR
     pw_ir_deinit();
@@ -235,11 +421,11 @@ ir_err_t dump_48k_rom(const char* fname) {
         // if you can read that many in one go
         //err = pw_ir_recv_packet(rom_buf, 0x88);
 
-        if(err != IR_OK) break;
+        if(err != IR_OK && err != IR_ERR_BAD_CHECKSUM) break;
         fwrite(rom_buf+8, 1, step, fp);
     }
 
-    if(err == IR_OK) {
+    if(err == IR_OK || err == IR_ERR_BAD_CHECKSUM) {
         printf("Dump success!\n");
     } else {
         printf("Dump failed\n");

@@ -2,6 +2,7 @@
 
 #include <stdlib.h> // rand()
 #include <unistd.h> // usleep()
+#include <string.h> // memcpy()
 
 #include "eeprom_map.h"
 #include "pw_ir.h"
@@ -442,4 +443,43 @@ ir_err_t pw_action_read_large_raw_data_from_eeprom(uint16_t src, uint16_t dst, s
     return err;
 }
 
+/*
+ * Send a contiguous section of data from `src` ptr to `dst` eeprom address
+ *
+ *  Designed to be run in a loop, hence only one read and one write.
+ */
+ir_err_t pw_action_send_large_raw_data_from_pointer(uint8_t *src, uint16_t dst, size_t final_write_size,
+        size_t write_size, uint8_t *pcounter, uint8_t *packet, size_t max_len) {
+    ir_err_t err = IR_ERR_GENERAL;
+
+    size_t cur_write_size   = (size_t)(*pcounter) * write_size;
+    uint16_t cur_write_addr = dst + cur_write_size;
+    uint8_t *cur_read_addr  = src + cur_write_size;
+    size_t n_read = 0;
+
+    // If we have written something, we expect an acknowledgment
+    if(cur_write_size > 0) {
+        err = pw_ir_recv_packet(packet, 8, &n_read);
+        if(err != IR_OK) return err;
+        if(packet[0] != CMD_EEPROM_WRITE_ACK) return IR_ERR_UNEXPECTED_PACKET;
+    }
+
+    if( (cur_write_addr&0x07) > 0) return IR_ERR_UNALIGNED_WRITE;
+    //if( (final_write_size&0x07) > 0) return IR_ERR_UNALIGNED_WRITE;   // walker can handle this
+
+    pw_ir_delay_ms(4);
+
+    if( cur_write_size < final_write_size) {
+        packet[0] = (uint8_t)(cur_write_addr&0xff) + 2; // Need +2 to make it raw write command
+        packet[1] = (uint8_t)(cur_write_addr>>8);
+        //pw_eeprom_read(cur_read_addr, packet+8, write_size);
+        memcpy(packet+8, cur_read_addr, write_size);
+
+        err = pw_ir_send_packet(packet, 8+write_size, &n_read);
+        if(err != IR_OK) return err;
+        (*pcounter)++;
+    }
+
+    return err;
+}
 

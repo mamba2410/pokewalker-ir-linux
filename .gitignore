@@ -1,5 +1,7 @@
 build/target/
 build/build_number
+shellcode/
+images/
 *.exe
 tags
 *.taghl

@@ -57,6 +57,11 @@
 #define CMD_EVENT_ITEM          0xc4
 #define CMD_EVENT_ROUTE         0xc6
 
+#define CMD_EVENT_MAP_STAMPS           0xd0
+#define CMD_EVENT_POKEMON_STAMPS       0xd2
+#define CMD_EVENT_ITEM_STAMPS          0xd4
+#define CMD_EVENT_ROUTE_STAMPS         0xd6
+
 #define CMD_RAM_WRITE   0x06
 
 #define EXTRA_BYTE_FROM_WALKER  0x01
