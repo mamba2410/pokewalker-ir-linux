@@ -17,7 +17,7 @@ include ./build/build_number.mak	# build number tracking
 # Main recipe
 ###########################################################################################################
 
-MAIN_BIN 		= a.exe
+MAIN_BIN 		= pw-ir
 MAIN_CC_FLAGS	= $(GLOBAL_CC_FLAGS)
 MAIN_LD_FLAGS	= $(GLOBAL_LD_FLAGS) -L'$(LIB_D)' -Wl,-rpath='$(LIB_D)'
 MAIN_SRC_D		= ./src

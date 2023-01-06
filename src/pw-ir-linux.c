@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <unistd.h>
+#include <getopt.h>
 
 #include "pw-ir-linux.h"
 #include "pw_ir.h"
@@ -15,97 +17,6 @@
 #include "trainer_info.h"
 #include "special_things.h"
 
-void run_comms_loop();
-void dump_rom(uint64_t which, const char* fname);
-
-ir_err_t dump_64k_rom(const char* fname);
-ir_err_t dump_48k_rom(const char* fname);
-void print_packet(uint8_t *buf, size_t len);
-
-/*
- *  Shell code taken from Dmitry GR
- */
-static const uint8_t rom_dump_exploit_upload_to_0xF956[] = {
-	0x56,                       //upload address low byte
-	0x5E, 0x00, 0xBA, 0x42,     //jsr     common_prologue
-	0x19, 0x55,                 //sub.w   r5, r5
-//lbl_big_loop:
-	0x79, 0x06, 0xf8, 0xd6,     //mov.w   0xf8d6, r6
-	0xfc, 0x80,                 //mov.b   0x80, r4l
-	0x7b, 0x5c, 0x59, 0x8f,     //eemov.b
-	0x79, 0x00, 0xaa, 0x80,     //mov.w   #0xaa80, r0
-	0x5e, 0x00, 0x07, 0x72,     //jsr     sendPacket
-	0x5E, 0x00, 0x25, 0x9E,     //jsr     wdt_pet
-	0x79, 0x25, 0xc0, 0x00,     //cmp.w   r5, #0xc000
-	0x46, 0xe4,                 //bne     $-0x1c		//lbl_big_loop
-	0x79, 0x00, 0x08, 0xd6,     //mov.w   #&irAppMainLoop, r0
-	0x5e, 0x00, 0x69, 0x3a,     //jsr     setProcToCallByMainInLoop
-	0x5a, 0x00, 0xba, 0x62      //jmp     common_epilogue
-};
-const size_t shellcode_size = sizeof(rom_dump_exploit_upload_to_0xF956);
-
-static const uint8_t trigger_uploaded_code_upload_to_0xF7E0[] = {
-	0xe0,                       //upload address low byte
-	0xf9, 0x56                  //pointer to our code to run
-};
-const size_t triggercode_size = sizeof(trigger_uploaded_code_upload_to_0xF7E0);
-
-
-int load_shellcode(uint8_t *buf, const char* fname, size_t len) {
-    FILE *f = fopen(fname, "r");
-    if(f == 0) return -1;
-
-    fread(buf, len, 1, f);
-
-    fclose(f);
-    return 0;
-}
-
-int send_shellcode(uint8_t *shellcode, size_t len) {
-    ir_err_t err;
-    uint8_t *buf = malloc(len+8);
-    size_t n_read = 0;
-
-    memcpy(buf+8+1, shellcode, len);
-
-    buf[0] = 0x06;
-    buf[1] = 0xf9;
-    buf[8] = 0x56;
-    print_packet(buf, len+8+1);
-    err = pw_ir_send_packet(buf, len+8+1, &n_read);
-    if(err != IR_OK) {
-    printf("Error uploading shellcode: %s\n", PW_IR_ERR_NAMES[err]);
-        print_packet(buf, n_read);
-        return -1;
-    }
-    printf("Sent shellcode\n");
-
-    pw_ir_delay_ms(1);
-
-    err = pw_ir_recv_packet(buf, 8, &n_read);
-    if(err != IR_OK) {
-        printf("Error in shellcode ack: %s\n", PW_IR_ERR_NAMES[err]);
-        print_packet(buf, n_read);
-        return -1;
-    }
-    printf("Recv shellcode ack\n");
-
-    pw_ir_delay_ms(1);
-    memcpy(buf+8, trigger_uploaded_code_upload_to_0xF7E0, triggercode_size);
-
-    buf[0] = 0x06;
-    buf[1] = 0xf7;
-    err = pw_ir_send_packet(buf, triggercode_size+8, &n_read);
-    if(err != IR_OK) printf("Error uploading shellcode: %s\n", PW_IR_ERR_NAMES[err]);
-    printf("Sent trigger code\n");
-
-
-    err = pw_ir_recv_packet(buf, 8, &n_read);
-    if(err != IR_OK) printf("Error in triggercode ack: %s\n", PW_IR_ERR_NAMES[err]);
-    printf("Recv trigger ack\n");
-
-    return 0;
-}
 
 int send_custom_event_pokemon(const char* sprite_file, const char* pokemon_name_file, const char* item_name_file) {
     pokemon_summary_t ps = {
@@ -170,18 +81,6 @@ int send_custom_event_pokemon(const char* sprite_file, const char* pokemon_name_
     return 0;
 }
 
-void print_packet(uint8_t *buf, size_t len) {
-    size_t i;
-    for(i = 0; i < 8; i++) {
-        printf("%02x", buf[i]);
-    }
-    printf(" ");
-    for(; i < len; i++) {
-        printf("%02x", buf[i]);
-    }
-    printf("\n");
-}
-
 void run_comms_loop() {
     comm_state_t cs;
 
@@ -190,6 +89,7 @@ void run_comms_loop() {
         pw_comms_event_loop();
     } while( (cs=pw_ir_get_comm_state()) != COMM_STATE_DISCONNECTED );
 }
+
 
 void full_send_shellcode(uint8_t *shellcode, size_t len) {
     comm_state_t cs = COMM_STATE_DISCONNECTED;
@@ -270,174 +170,210 @@ void dump_rom(uint64_t which, const char* fname) {
 }
 
 
+void exit_ok() {
+    pw_ir_deinit();
+    exit(0);
+}
+
+
+void usage() {
+    printf("\
+Usage: pw-ir [action, [options] ]\n\
+\n\
+Actions:\n\
+    --dump-rom <rom>, -d <rom>          Dump rom, either \'64\' or \'48\'.\n\
+    --shellcode <file>, -s <file>       Upload shellcode from binary file.\n\
+    --gift-files <files>, -f <files>    Upload gift files. Must be in the order\n\
+                                        pokemon_summary:pokemon_image_name:item_image_name\n\
+\n\
+Options:\n\
+    --out-file <file>                   Output file for things like dumps.\n\
+    --stamps                            If we should include stamps in the gift.\n\
+    --gift <type>, -g <type>            Send a gift. `type` is either \'item\' or \'pokemon\'.\n\
+                                        One at a time, need to have uploaded gift files at least once before.\n\
+");
+
+}
+
 int main(int argc, char** argv){
 
+    static int stamps = 0;
+    int c, option_index=0;
+    int dump=0;
+    int has_action=0;
+
+    char *out_fname=0, *shellcode_fname=0;
+    char* gift_files[3];
+    enum gift_type gift = GIFT_NONE;
+
+    static struct option long_options[] = {
+        // name,        arg?,               flag var,   index
+        {"dump-rom",    required_argument,  0,          'd'},
+        {"shellcode",   required_argument,  0,          's'},
+        {"out-file",    required_argument,  0,          'o'},
+        {"send-gift",   required_argument,  0,          'g'},
+        {"gift-files",  required_argument,  0,          'f'},
+        {"stamps",      no_argument,        &stamps,    1},
+        {0, 0, 0, 0}
+    };
+    static const char* short_options = "d:s:o:g:f:m";
+
+    while( (c = getopt_long(argc, argv, short_options, long_options, &option_index)) != -1 ) {
+        switch(c) {
+            case 'd': {
+                dump = atoi(optarg);
+                if(!has_action) {
+                    has_action = 1;
+                } else {
+                    printf("Error: Can only do one action at a time\n.");
+                    usage();
+                    exit(EXIT_FAILURE);
+                }
+                break;
+            }
+            case 's': {
+                shellcode_fname = optarg;
+                if(!has_action) {
+                    has_action = 1;
+                } else {
+                    printf("Error: Can only do one action at a time\n.");
+                    usage();
+                    exit(EXIT_FAILURE);
+                }
+                break;
+            }
+            case 'o': {
+                out_fname = optarg;
+                break;
+            }
+            case 'f': {
+                const char* delims = ",:";
+                char* tok = strtok(optarg, delims);
+                int i;
+                for(i = 0; tok != 0; i++) {
+                    gift_files[i] = tok;
+                    tok = strtok(0, delims);
+                }
+
+                if(i != 3) {
+                    printf("Error: expected 3 input files for gift pokemon. Got %d.\n", i);
+                    usage();
+                    exit(EXIT_FAILURE);
+                }
+
+                if(!has_action) {
+                    has_action = 1;
+                } else {
+                    printf("Error: Can only do one action at a time\n.");
+                    usage();
+                    exit(EXIT_FAILURE);
+                }
+
+                break;
+            }
+            case 'g': {
+                // gift item or pokemon
+                if (strncmp("item", optarg, 16) == 0 ) {
+                    gift = GIFT_ITEM;
+                } else if(strncmp("pokemon", optarg, 16) == 0) {
+                    gift = GIFT_POKEMON;
+                } else {
+                    printf("Error: cannot gift \'%s\', expected either \'pokemon\' or \'item\'\n.", optarg);
+                    usage();
+                    exit(EXIT_FAILURE);
+                }
+                break;
+            }
+            default: {
+                printf("Unknown arg: %c\n.", c);
+                usage();
+                break;
+            }
+        }
+    }
+
     pw_ir_init();
-    pw_eeprom_raw_init();
+    //pw_eeprom_raw_init();
     pw_comms_init();
 
-    //dump_rom(48, "dumps/flashrom.bin");
-    //dump_rom(64, "dumps/electrode-full.bin");
 
+    comm_state_t cs = COMM_STATE_AWAITING;
 
-    //run_comms_loop();   // get handshake
+    if(gift_files[0] != 0) {
+        printf("Present Pokewalker...\n");
+        do {
+            pw_comms_event_loop();
+        } while( (cs=pw_ir_get_comm_state()) != COMM_STATE_MASTER );
 
+        // pokemon_summary, special_data, sprite, pokemon_name, item id, item_name
+        //send_event_data(gift_files[0],gift_files[1], gift_files[2]);
 
-    comm_state_t cs;
-    do {
-        pw_comms_event_loop();
-    } while( (cs=pw_ir_get_comm_state()) != COMM_STATE_MASTER );
-
-    send_custom_event_pokemon("images/sprite.bin", "images/pokemon_name.bin", "images/item_name.bin");
-    /*
-    */
-
-    /*
-    size_t shellcode_len = 34;
-    uint8_t *shellcode = malloc(shellcode_len);
-    int err = load_shellcode(shellcode, "shellcode/max_steps.bin", shellcode_len);
-    if(err != 0) {
-        pw_ir_deinit();
-        printf("Error loading shellcode\n");
-        return -1;
+        printf("Done!\n");
+        exit_ok();
     }
-    printf("Loaded shellcode\n");
 
-    full_send_shellcode(shellcode, shellcode_len);
+    if(gift != GIFT_NONE) {
+        printf("Present Pokewalker...\n");
+        do {
+            pw_comms_event_loop();
+        } while( (cs=pw_ir_get_comm_state()) != COMM_STATE_MASTER );
 
-    printf("Send shellcode\n");
-    */
+        ir_err_t err = send_event_command(gift, stamps);
+        if(err != IR_OK) {
+            printf("Error: can't send gift command.\n");
+            pw_ir_deinit();
+            exit(EXIT_FAILURE);
+        }
+        printf("Done!\n");
+        exit_ok();
+    }
 
 
-    // safely shut down IR
-    pw_ir_deinit();
+    if(dump != 0) {
+        if(out_fname == 0) {
+            printf("Error: Can't dump rom, missing output file (hint: use `-o` to set it)\n");
+            pw_ir_deinit();
+            exit(EXIT_FAILURE);
+        }
+        switch(dump) {
+            case 48:
+            case 64: {
+                printf("Present Pokewalker...\n");
+                dump_rom(dump, out_fname);
+                break;
+            }
+            default: {
+                printf("Error: Can't dump %dk rom. Options are [48, 64]\n", dump);
+                pw_ir_deinit();
+                exit(EXIT_FAILURE);
+            }
+        }
+        exit_ok();
+    }
 
-	return 0;
+    if(shellcode_fname != 0) {
+
+        size_t shellcode_len;
+        uint8_t *shellcode = load_shellcode(shellcode_fname, &shellcode_len);
+
+        if(shellcode == 0) {
+            pw_ir_deinit();
+            printf("Error loading shellcode from file \'%s\'\n", shellcode_fname);
+            return -1;
+        }
+        printf("Loaded shellcode\n");
+        printf("shellcode: %p, %lu\n", shellcode, shellcode_len);
+
+        printf("Present Pokewalker...\n");
+        full_send_shellcode(shellcode, shellcode_len);
+        printf("Sent shellcode\n");
+
+        free(shellcode);
+
+        exit_ok();
+    }
+
+
+    exit_ok();
 }
 
-ir_err_t dump_64k_rom(const char* fname) {
-    ir_err_t err;
-    uint8_t rom_buf[0x88];
-    size_t n_read = 0;
-
-    FILE *fp = fopen(fname, "wb");
-    if(!fp) {
-        printf("Error: can't open file\n");
-        return IR_ERR_GENERAL;
-    }
-
-    uint8_t packet[11];
-
-    size_t step = 56; // 64-byte serial buffer :(
-    size_t read_size = 64*1024;
-
-    for(size_t i = 0; i < read_size; i+=step) {
-        printf("Reading address: %04lx\n", i);
-        uint8_t read_len = ((read_size-i)>step)?step:read_size-i;
-
-        // TODO: Ask for eeprom read
-        packet[0] = CMD_EEPROM_READ_REQ;
-        packet[1] = EXTRA_BYTE_TO_WALKER;
-        packet[8] = (uint8_t)(i>>8);
-        packet[9] = (uint8_t)(i&0xff);
-        packet[10] = (uint8_t)read_len;
-
-        err = pw_ir_send_packet(packet, 11, &n_read);
-        if(err != IR_OK) break;
-
-        // hacky way to get around 64-byte rx buffer
-        err = pw_ir_recv_packet(rom_buf, read_len+8, &n_read);
-
-        // Responses are VALID packets
-        if(err != IR_OK) break;
-
-        fwrite(rom_buf+8, 1, read_len, fp);
-    }
-
-    if(err == IR_OK) {
-        printf("Dump success!\n");
-    } else {
-        printf("Dump failed\n");
-        printf("\tError code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
-    }
-
-    fclose(fp);
-    return err;
-
-}
-
-
-ir_err_t dump_48k_rom(const char* fname) {
-    ir_err_t err;
-    uint8_t *buf = malloc(shellcode_size+8);
-    size_t n_read = 0;
-
-    memcpy(buf+8, rom_dump_exploit_upload_to_0xF956, shellcode_size);
-
-    buf[0] = 0x06;
-    buf[1] = 0xf9;
-    err = pw_ir_send_packet(buf, shellcode_size+8, &n_read);
-    if(err != IR_OK) printf("Error uploading shellcode: %s\n", PW_IR_ERR_NAMES[err]);
-    printf("Sent shellcode\n");
-
-    pw_ir_delay_ms(1);
-
-    err = pw_ir_recv_packet(buf, 8, &n_read);
-    if(err != IR_OK) printf("Error in shellcode ack: %s\n", PW_IR_ERR_NAMES[err]);
-    printf("Recv shellcode ack\n");
-
-    pw_ir_delay_ms(1);
-    memcpy(buf+8, trigger_uploaded_code_upload_to_0xF7E0, triggercode_size);
-
-    buf[0] = 0x06;
-    buf[1] = 0xf7;
-    err = pw_ir_send_packet(buf, triggercode_size+8, &n_read);
-    if(err != IR_OK) printf("Error uploading shellcode: %s\n", PW_IR_ERR_NAMES[err]);
-    printf("Sent trigger code\n");
-
-
-    err = pw_ir_recv_packet(buf, 8, &n_read);
-    if(err != IR_OK) printf("Error in triggercode ack: %s\n", PW_IR_ERR_NAMES[err]);
-    printf("Recv trigger ack\n");
-
-    FILE *fp = fopen(fname, "wb");
-    if(!fp) {
-        printf("Error: can't open file\n");
-        return IR_ERR_GENERAL;
-    }
-
-    uint8_t rom_buf[0x88];
-
-    size_t step = 0x80;
-    size_t read_size = 48*1024;
-    for(size_t i = 0; i < read_size; i+=step) {
-        printf("Reading address: %04lx\n", i);
-
-        // hacky way to get around 64-byte rx buffer
-        err = pw_ir_recv_packet(rom_buf, 8, &n_read);
-        (void)pw_ir_recv_packet(rom_buf+8, 0x40, &n_read);
-        (void)pw_ir_recv_packet(rom_buf+0x48, 0x40, &n_read);
-
-        // if you can read that many in one go
-        //err = pw_ir_recv_packet(rom_buf, 0x88);
-
-        if(err != IR_OK && err != IR_ERR_BAD_CHECKSUM) break;
-        fwrite(rom_buf+8, 1, step, fp);
-    }
-
-    if(err == IR_OK || err == IR_ERR_BAD_CHECKSUM) {
-        printf("Dump success!\n");
-    } else {
-        printf("Dump failed\n");
-        printf("\tError code: %02x: %s\n", err, PW_IR_ERR_NAMES[err]);
-    }
-
-    fclose(fp);
-    return IR_OK;
-}
-
-
-ir_err_t peer_play() {
-
-    return IR_OK;
-}
