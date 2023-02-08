@@ -6,6 +6,8 @@
 
 #include "pw_ir.h"
 
+#define DECOMPRESSION_BUFFER_SIZE   256
+
 typedef enum {
     COMM_SUBSTATE_NONE,
     COMM_SUBSTATE_FINDING_PEER,

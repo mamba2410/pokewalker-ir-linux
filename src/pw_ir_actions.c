@@ -8,7 +8,11 @@
 #include "pw_ir.h"
 #include "pw_ir_actions.h"
 #include "eeprom.h"
+#include "compression.h"
 
+
+static uint8_t decompression_buffer[DECOMPRESSION_BUFFER_SIZE];
+ir_err_t pw_ir_eeprom_do_write(uint8_t *packet, size_t len);
 
 /*
  *  Listen for a packet.
@@ -16,7 +20,9 @@
  */
 ir_err_t pw_action_listen_and_advertise(uint8_t *rx, size_t *pn_read, uint8_t *padvertising_attempts) {
 
-    ir_err_t err = pw_ir_recv_packet(rx, 8, pn_read);
+    ir_err_t err = IR_ERR_TIMEOUT;
+
+    err = pw_ir_recv_packet(rx, 8, pn_read);
 
     // if we didn't read anything, send an advertising packet
     if(*pn_read == 0) {
@@ -39,8 +45,11 @@ ir_err_t pw_action_listen_and_advertise(uint8_t *rx, size_t *pn_read, uint8_t *p
 ir_err_t pw_action_try_find_peer(uint8_t *packet, size_t packet_max,
         comm_substate_t *psubstate, uint8_t *padvertising_attempts) {
 
-    ir_err_t err;
+    ir_err_t err = IR_ERR_GENERAL;
     size_t n_read = 0;
+
+    //*psubstate = COMM_SUBSTATE_DETERMINE_ROLE;
+    //packet[0] = 0xfc;
 
     switch(*psubstate) {
         case COMM_SUBSTATE_FINDING_PEER: {
@@ -52,18 +61,20 @@ ir_err_t pw_action_try_find_peer(uint8_t *packet, size_t packet_max,
                 case IR_OK:
                     // we got a valid packet back, now check if master or slave on next iteration
                     *psubstate = COMM_SUBSTATE_DETERMINE_ROLE;
-                case IR_ERR_TIMEOUT: err = IR_OK; break; // ignore timeout
+                    break;
+                case IR_ERR_TIMEOUT: err = IR_OK; return IR_OK; // ignore timeout
                 case IR_ERR_ADVERTISING_MAX: return IR_ERR_ADVERTISING_MAX;
                 default: return IR_ERR_GENERAL;
             }
 
-            break;
+            //break;
         }
         case COMM_SUBSTATE_DETERMINE_ROLE: {
 
             // We should already have a response in the packet buffer
             switch(packet[0]) {
                 case CMD_ADVERTISING: // we found peer, we request master
+
                     packet[0x00] = CMD_ASSERT_MASTER;
                     packet[0x01] = EXTRA_BYTE_FROM_WALKER;
                     err = pw_ir_send_packet(packet, 8, &n_read);
@@ -72,7 +83,11 @@ ir_err_t pw_action_try_find_peer(uint8_t *packet, size_t packet_max,
                     break;
                 case CMD_ASSERT_MASTER: // peer found us, peer requests master
                     packet[0x00] = CMD_SLAVE_ACK;
-                    packet[0x01] = EXTRA_BYTE_FROM_WALKER;
+                    packet[0x01] = 2;
+                    // combine keys
+                    for(int i = 0; i < 4; i++)
+                        session_id[i] = packet[4+i];
+                    pw_ir_delay_ms(1);
                     err = pw_ir_send_packet(packet, 8, &n_read);
 
                     pw_ir_set_comm_state(COMM_STATE_SLAVE);
@@ -108,12 +123,87 @@ ir_err_t pw_action_try_find_peer(uint8_t *packet, size_t packet_max,
  */
 ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len) {
 
-    ir_err_t err;
+    uint8_t cmd = packet[0];
+    ir_err_t err = IR_ERR_GENERAL;
+    size_t n_rw;
 
-    switch(packet[0]) {
-        default:
-            err = IR_ERR_NOT_IMPLEMENTED;
+    switch(cmd) {
+        case CMD_IDENTITY_REQ: {
+            packet[0] = CMD_IDENTITY_RSP;
+            packet[1] = EXTRA_BYTE_FROM_WALKER;
+
+            int r = pw_eeprom_reliable_read(
+                 PW_EEPROM_ADDR_IDENTITY_DATA_1,
+                 PW_EEPROM_ADDR_IDENTITY_DATA_2,
+                 packet+8,
+                 PW_EEPROM_SIZE_IDENTITY_DATA_1
+             );
+
+            if(r < 0) {
+                return IR_ERR_GENERAL;
+            }
+
+            pw_ir_delay_ms(5);
+
+            err = pw_ir_send_packet(packet, 8+PW_EEPROM_SIZE_IDENTITY_DATA_1, &n_rw);
+
             break;
+        }
+        case CMD_IDENTITY_SEND_ALIAS2: {
+            packet[0] = CMD_IDENTITY_ACK_ALIAS2;
+            packet[1] = EXTRA_BYTE_FROM_WALKER;
+
+            //TODO: set the rtc, that's it
+
+            pw_ir_delay_ms(5);
+
+            err = pw_ir_send_packet(packet, 8, &n_rw);
+
+            break;
+        }
+        case CMD_EEPROM_WRITE_CMP_00:
+        case CMD_EEPROM_WRITE_RAW_00:
+        case CMD_EEPROM_WRITE_CMP_80:
+        case CMD_EEPROM_WRITE_RAW_80: {
+            pw_ir_eeprom_do_write(packet, len);
+            break;
+        }
+        case CMD_EEPROM_READ_REQ: {
+            uint16_t addr = packet[8]<<8 | packet[9];
+            size_t len = packet[10];
+
+            packet[0] = CMD_EEPROM_READ_RSP;
+            packet[1] = EXTRA_BYTE_FROM_WALKER;
+            pw_eeprom_read(addr, packet+8, len);
+
+            pw_ir_delay_ms(5);
+
+            err = pw_ir_send_packet(packet, 8+len, &n_rw);
+            break;
+        }
+        case CMD_PING: {
+             packet[0] = CMD_PONG;
+             packet[1] = EXTRA_BYTE_FROM_WALKER;
+
+             pw_ir_delay_ms(5);
+
+             err = pw_ir_send_packet(packet, 8, &n_rw);
+             break;
+        }
+        case CMD_CONNECT_COMPLETE: {
+             packet[0] = CMD_CONNECT_COMPLETE_ACK;
+             packet[1] = EXTRA_BYTE_FROM_WALKER;
+             pw_ir_delay_ms(5);
+
+             err = pw_ir_send_packet(packet, 8, &n_rw);
+             break;
+        }
+        case CMD_WALK_START:
+        default: {
+            printf("[Error] Slave recv unhandled packet: %02x\n", cmd);
+            break;
+        }
+
     }
 
     return err;
@@ -481,5 +571,48 @@ ir_err_t pw_action_send_large_raw_data_from_pointer(uint8_t *src, uint16_t dst, 
     }
 
     return err;
+}
+
+ir_err_t pw_ir_eeprom_do_write(uint8_t *packet, size_t len) {
+    ir_err_t err = IR_OK;
+    uint8_t *data;
+    uint8_t wlen = 128;
+
+    uint8_t cmd = packet[0];
+    uint16_t addr = (packet[1]<<8) | (cmd&0x80);
+
+    if(cmd & 0x02) {
+        // decompress
+        decompress_data(packet+8, decompression_buffer, len-8);
+        data = decompression_buffer;
+    } else {
+        data = packet+8;
+    }
+
+    pw_eeprom_write(addr, data, wlen);
+
+    return err;
+}
+
+
+// NOT an actual function, since it's all us as slave
+ir_err_t pw_slave_start_walk(uint8_t *packet, size_t len) {
+
+    /*
+     *  M> CMD_20
+     *  S> CMD_22
+     *  M> CMD_52
+     *  S> CMD_54
+     *  M> W:d700-ffff (temp)
+     *  M> W:d480 (team data, temp)
+     *  M> read inventory CE80-DBCB, B800-BEC7
+     *  M> Ping
+     *  S> Pong
+     *  M> CMD_5A
+     *  S> CMD_5A
+     *
+     */
+
+    return IR_OK;
 }
 

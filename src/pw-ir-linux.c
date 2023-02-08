@@ -18,6 +18,32 @@
 #include "special_things.h"
 
 
+const uint8_t dmitry_backref[] = {0x10, 0x80, 0x00, 0x00, 0xff, 0xd0, 0x7f, 0xd0, 0x7f, 0xd0, 0x7f, 0xd0, 0x7f, 0xd0, 0x7f, 0xd0, 0x7f, 0xd0, 0x7f, 0xd0, 0x7f};
+const size_t dmitry_backref_len = sizeof(dmitry_backref);
+
+
+void run_test() {
+        // test decompression on dmitry's backref overflow
+
+        printf("Test1");
+        uint8_t *buf = malloc(264 * sizeof(*buf));
+        printf("Test2");
+
+        // fill with known value
+        for(size_t i = 0; i < 128; i++)
+            buf[i] = i;
+
+        int err = decompress_data(dmitry_backref, buf+128, dmitry_backref_len);
+        for(size_t i = 0; i < 128; i++) {
+            printf("%02x ", buf[128+i]);
+            if((i+1)%8 == 0)  printf(" ");
+            if((i+1)%16 == 0) printf("\n");
+        }
+        printf("\n");
+
+        free(buf);
+}
+
 int send_custom_event_pokemon(const char* sprite_file, const char* pokemon_name_file, const char* item_name_file) {
     pokemon_summary_t ps = {
         le_species: 0x004c, // 4a = geodude
@@ -87,6 +113,7 @@ void run_comms_loop() {
     // Run our comms loop
     do {
         pw_comms_event_loop();
+        pw_ir_delay_ms(300);
     } while( (cs=pw_ir_get_comm_state()) != COMM_STATE_DISCONNECTED );
 }
 
@@ -195,9 +222,10 @@ Options:\n\
 
 }
 
+
 int main(int argc, char** argv){
 
-    static int stamps = 0;
+    int stamps = 0, is_test = 0;
     int c, option_index=0;
     int dump=0;
     int has_action=0;
@@ -206,7 +234,7 @@ int main(int argc, char** argv){
     char* gift_files[3];
     enum gift_type gift = GIFT_NONE;
 
-    static struct option long_options[] = {
+    struct option long_options[] = {
         // name,        arg?,               flag var,   index
         {"dump-rom",    required_argument,  0,          'd'},
         {"shellcode",   required_argument,  0,          's'},
@@ -214,9 +242,10 @@ int main(int argc, char** argv){
         {"send-gift",   required_argument,  0,          'g'},
         {"gift-files",  required_argument,  0,          'f'},
         {"stamps",      no_argument,        &stamps,    1},
+        {"test",        no_argument,        &is_test,   1},
         {0, 0, 0, 0}
     };
-    static const char* short_options = "d:s:o:g:f:m";
+    const char* short_options = "d:s:o:g:f:mt";
 
     while( (c = getopt_long(argc, argv, short_options, long_options, &option_index)) != -1 ) {
         switch(c) {
@@ -284,18 +313,32 @@ int main(int argc, char** argv){
                 }
                 break;
             }
+            case 0: {
+                //void* k = long_options[option_index].flag;
+                //printf("%d", option_index);
+                //option_index = 0;
+                        // breaks if I remove this...
+                        //printf("Have option: %s\n", long_options[option_index].name);
+                        break;
+                    }
             default: {
-                printf("Unknown arg: %c\n.", c);
+                printf("Unknown arg: %c (%d)\n.", c, c);
                 usage();
                 break;
             }
         }
     }
 
+
     pw_ir_init();
-    //pw_eeprom_raw_init();
+    pw_eeprom_raw_init();
     pw_comms_init();
 
+    if(is_test) {
+        //run_test();
+        run_comms_loop();
+        return 0;
+    }
 
     comm_state_t cs = COMM_STATE_AWAITING;
 

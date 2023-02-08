@@ -51,6 +51,7 @@
 #define CMD_WALKER_RESET_RSP    0x2c
 #define CMD_WALK_END_REQ        0x4e
 #define CMD_WALK_END_ACK        0x50
+#define CMD_WALK_START          0x5a
 
 #define CMD_EVENT_MAP           0xc0
 #define CMD_EVENT_POKEMON       0xc2

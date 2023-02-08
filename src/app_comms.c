@@ -27,11 +27,13 @@ void pw_comms_event_loop() {
     comm_state_t cs = pw_ir_get_comm_state();
     switch(cs) {
         case COMM_STATE_AWAITING: {
+            printf("trying to find peer\n");
             err = pw_action_try_find_peer(rx_buf, PW_RX_BUF_LEN,
                     &g_comm_substate, &g_advertising_attempts);
             break;
         }
         case COMM_STATE_SLAVE: {
+            printf("We are slave");
             err = pw_ir_recv_packet(rx_buf, PW_RX_BUF_LEN, &n_read);
             if(err == IR_OK || err == IR_ERR_SIZE_MISMATCH) {
                 pw_action_slave_perform_request(rx_buf, PW_TX_BUF_LEN);
@@ -42,8 +44,9 @@ void pw_comms_event_loop() {
             if(g_comm_substate == COMM_SUBSTATE_AWAITING_SLAVE_ACK) {
                 g_comm_substate = COMM_SUBSTATE_START_PEER_PLAY;
             }
+            printf("We are master\n");
 
-            err = pw_action_peer_play(&g_comm_substate, &g_comm_loop_counter, rx_buf, PW_RX_BUF_LEN);
+            //err = pw_action_peer_play(&g_comm_substate, &g_comm_loop_counter, rx_buf, PW_RX_BUF_LEN);
             break;
         }
         case COMM_STATE_DISCONNECTED: return;
