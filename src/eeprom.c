@@ -28,6 +28,10 @@ int pw_eeprom_reliable_read(uint16_t addr1, uint16_t addr2, uint8_t *buf, size_t
 
     bool area1_ok, area2_ok, area_mismatch;;
 
+    if(buf == 0) {
+        return -1;
+    }
+
     pw_eeprom_raw_read(addr2, buf, len);
     pw_eeprom_raw_read(addr2+len, &written_chk2, 1);
     chk2 = pw_eeprom_checksum(buf, len);
@@ -87,7 +91,7 @@ int pw_eeprom_reliable_write(uint16_t addr1, uint16_t addr2, uint8_t *buf, size_
 }
 
 uint8_t pw_eeprom_checksum(uint8_t *buf, size_t len) {
-    uint8_t chk = 0;
+    uint8_t chk = 1;
     for(size_t i = 0; i < len; i++)
         chk += buf[i];
 
