@@ -113,7 +113,6 @@ void run_comms_loop() {
     // Run our comms loop
     do {
         pw_comms_event_loop();
-        pw_ir_delay_ms(300);
     } while( (cs=pw_ir_get_comm_state()) != COMM_STATE_DISCONNECTED );
 }
 
@@ -337,6 +336,7 @@ int main(int argc, char** argv){
     if(is_test) {
         //run_test();
         run_comms_loop();
+        pw_eeprom_raw_deinit();
         return 0;
     }
 
@@ -417,6 +417,7 @@ int main(int argc, char** argv){
     }
 
 
+    pw_eeprom_raw_deinit();
     exit_ok();
 }
 

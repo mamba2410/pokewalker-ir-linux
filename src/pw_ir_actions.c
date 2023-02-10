@@ -84,11 +84,18 @@ ir_err_t pw_action_try_find_peer(uint8_t *packet, size_t packet_max,
                 case CMD_ASSERT_MASTER: // peer found us, peer requests master
                     packet[0x00] = CMD_SLAVE_ACK;
                     packet[0x01] = 2;
+
+                    // record master key
+                    uint8_t session_id_master[4];
+                    for(int i = 0; i < 4; i++)
+                        session_id_master[i] = packet[4+i];
+
+                    err = pw_ir_send_packet(packet, 8, &n_read);
+
                     // combine keys
                     for(int i = 0; i < 4; i++)
-                        session_id[i] = packet[4+i];
+                        session_id[i] ^= session_id_master[i];
                     pw_ir_delay_ms(1);
-                    err = pw_ir_send_packet(packet, 8, &n_read);
 
                     pw_ir_set_comm_state(COMM_STATE_SLAVE);
                     break;
@@ -149,9 +156,9 @@ ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len) {
 
             break;
         }
-        case CMD_IDENTITY_SEND_ALIAS2: {
-            packet[0] = CMD_IDENTITY_ACK_ALIAS2;
-            packet[1] = EXTRA_BYTE_FROM_WALKER;
+        case CMD_IDENTITY_SEND_ALIAS1: {
+            packet[0] = CMD_IDENTITY_ACK_ALIAS1;
+            packet[1] = EXTRA_BYTE_TO_WALKER;
 
             //TODO: set the rtc, that's it
 
@@ -161,6 +168,31 @@ ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len) {
 
             break;
         }
+        case CMD_IDENTITY_SEND_ALIAS2: {
+            packet[0] = CMD_IDENTITY_ACK_ALIAS2;
+            packet[1] = EXTRA_BYTE_TO_WALKER;
+
+            //TODO: set the rtc, that's it
+
+            pw_ir_delay_ms(5);
+
+            err = pw_ir_send_packet(packet, 8, &n_rw);
+
+            break;
+        }
+        case CMD_IDENTITY_SEND_ALIAS3: {
+            packet[0] = CMD_IDENTITY_ACK_ALIAS3;
+            packet[1] = EXTRA_BYTE_TO_WALKER;
+
+            //TODO: set the rtc, that's it
+
+            pw_ir_delay_ms(5);
+
+            err = pw_ir_send_packet(packet, 8, &n_rw);
+
+            break;
+        }
+
         case CMD_EEPROM_WRITE_CMP_00:
         case CMD_EEPROM_WRITE_RAW_00:
         case CMD_EEPROM_WRITE_CMP_80:
@@ -182,23 +214,54 @@ ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len) {
             break;
         }
         case CMD_PING: {
-             packet[0] = CMD_PONG;
-             packet[1] = EXTRA_BYTE_FROM_WALKER;
+            packet[0] = CMD_PONG;
+            packet[1] = EXTRA_BYTE_FROM_WALKER;
 
-             pw_ir_delay_ms(5);
+            pw_ir_delay_ms(5);
 
-             err = pw_ir_send_packet(packet, 8, &n_rw);
-             break;
+            err = pw_ir_send_packet(packet, 8, &n_rw);
+            break;
         }
         case CMD_CONNECT_COMPLETE: {
-             packet[0] = CMD_CONNECT_COMPLETE_ACK;
-             packet[1] = EXTRA_BYTE_FROM_WALKER;
-             pw_ir_delay_ms(5);
+            packet[0] = CMD_CONNECT_COMPLETE_ACK;
+            packet[1] = EXTRA_BYTE_FROM_WALKER;
+            pw_ir_delay_ms(5);
 
-             err = pw_ir_send_packet(packet, 8, &n_rw);
-             break;
+            err = pw_ir_send_packet(packet, 8, &n_rw);
+            break;
         }
-        case CMD_WALK_START:
+        case 0x40: {
+            packet[0] = 0x42;
+            packet[1] = EXTRA_BYTE_FROM_WALKER;
+            pw_ir_delay_ms(5);
+            err = pw_ir_send_packet(packet, 8, &n_rw);
+            break;
+        }
+        case CMD_WALK_END_REQ: {
+            packet[0] = CMD_WALK_END_ACK;
+            packet[1] = EXTRA_BYTE_FROM_WALKER;
+            pw_ir_delay_ms(5);
+            err = pw_ir_send_packet(packet, 8, &n_rw);
+            pw_ir_set_comm_state(COMM_STATE_DISCONNECTED);
+            break;
+        }
+        case CMD_WALK_START: {
+            packet[0] = CMD_WALK_START;
+            packet[1] = EXTRA_BYTE_FROM_WALKER;
+            pw_ir_delay_ms(5);
+            err = pw_ir_send_packet(packet, 8, &n_rw);
+            break;
+        }
+        case CMD_DISCONNECT: {
+            err = IR_OK;
+            pw_ir_set_comm_state(COMM_STATE_DISCONNECTED);
+            break;
+        }
+        case CMD_NOCOMPLETE_ALIAS1: {
+            err = IR_OK;
+            pw_ir_set_comm_state(COMM_STATE_DISCONNECTED);
+            break;
+        }
         default: {
             printf("[Error] Slave recv unhandled packet: %02x\n", cmd);
             break;

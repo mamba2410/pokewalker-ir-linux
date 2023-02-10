@@ -33,10 +33,11 @@ void pw_comms_event_loop() {
             break;
         }
         case COMM_STATE_SLAVE: {
-            printf("We are slave");
+            printf("We are slave.\n");
             err = pw_ir_recv_packet(rx_buf, PW_RX_BUF_LEN, &n_read);
             if(err == IR_OK || err == IR_ERR_SIZE_MISMATCH) {
-                pw_action_slave_perform_request(rx_buf, PW_TX_BUF_LEN);
+
+                err = pw_action_slave_perform_request(rx_buf, PW_TX_BUF_LEN);
             }
             break;
         }
@@ -58,7 +59,7 @@ void pw_comms_event_loop() {
 
     if(err != IR_OK) {
         pw_ir_die("Error during pw_comms_event_loop");
-        printf("\tError code: %02x: %s\n\tSubstate %d\n", err, PW_IR_ERR_NAMES[err], g_comm_substate);
+        printf("\tError code: %02x: %s\n\tState: %d\n\tSubstate %d\n", err, PW_IR_ERR_NAMES[err], pw_ir_get_comm_state(), g_comm_substate);
         return;
     }
 

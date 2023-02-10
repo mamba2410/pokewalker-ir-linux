@@ -9,6 +9,7 @@
                                 // and address must be aligned to nearest multiple
 
 void pw_eeprom_raw_init();
+void pw_eeprom_raw_deinit();
 void pw_eeprom_raw_read(uint16_t addr, uint8_t *buf, size_t len);
 void pw_eeprom_raw_write(uint16_t addr, uint8_t *buf, size_t len);
 

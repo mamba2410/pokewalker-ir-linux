@@ -39,3 +39,17 @@ void pw_eeprom_raw_write(uint16_t addr, uint8_t *buf, size_t len) {
     memcpy(eeprom+addr, buf, len);;
 }
 
+void pw_eeprom_raw_deinit() {
+
+    FILE *fh = fopen("./eeprom.bin", "rb");
+    if(!fh) {
+        printf("Error: cannot open eeprom file for reading.\n");
+        return;
+    }
+
+    fwrite(eeprom, 1, EEPROM_SIZE, fh);
+
+    fclose(fh);
+    free(eeprom);
+    eeprom = 0;
+}
