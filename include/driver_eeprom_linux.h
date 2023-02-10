@@ -12,6 +12,7 @@ void pw_eeprom_raw_init();
 void pw_eeprom_raw_deinit();
 void pw_eeprom_raw_read(uint16_t addr, uint8_t *buf, size_t len);
 void pw_eeprom_raw_write(uint16_t addr, uint8_t *buf, size_t len);
+void pw_eeprom_raw_set_area(uint16_t addr, uint8_t v, size_t len);
 
 
 #endif /* DRIVER_EEPROM_LINUX_H */
