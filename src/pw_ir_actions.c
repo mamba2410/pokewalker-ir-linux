@@ -9,6 +9,8 @@
 #include "pw_ir_actions.h"
 #include "eeprom.h"
 #include "compression.h"
+#include "trainer_info.h"
+
 
 
 static uint8_t decompression_buffer[DECOMPRESSION_BUFFER_SIZE];
@@ -242,6 +244,9 @@ ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len) {
             packet[1] = EXTRA_BYTE_FROM_WALKER;
             pw_ir_delay_ms(5);
             err = pw_ir_send_packet(packet, 8, &n_rw);
+
+            pw_ir_end_walk();
+
             pw_ir_set_comm_state(COMM_STATE_DISCONNECTED);
             break;
         }
@@ -652,30 +657,102 @@ ir_err_t pw_ir_eeprom_do_write(uint8_t *packet, size_t len) {
         data = packet+8;
     }
 
-    pw_eeprom_write(addr, data, wlen);
+        pw_eeprom_write(addr, data, wlen);
 
     return err;
 }
 
 
-// NOT an actual function, since it's all us as slave
-ir_err_t pw_slave_start_walk(uint8_t *packet, size_t len) {
+void pw_ir_end_walk() {
 
-    /*
-     *  M> CMD_20
-     *  S> CMD_22
-     *  M> CMD_52
-     *  S> CMD_54
-     *  M> W:d700-ffff (temp)
-     *  M> W:d480 (team data, temp)
-     *  M> read inventory CE80-DBCB, B800-BEC7
-     *  M> Ping
-     *  S> Pong
-     *  M> CMD_5A
-     *  S> CMD_5A
-     *
-     */
+    walker_info_t info;
 
-    return IR_OK;
+    pw_eeprom_reliable_read(
+        PW_EEPROM_ADDR_IDENTITY_DATA_1,
+        PW_EEPROM_ADDR_IDENTITY_DATA_2,
+        (uint8_t*)(&info),
+        PW_EEPROM_SIZE_IDENTITY_DATA_1
+    );
+
+    info.le_unk1 = 0;
+    info.le_unk3 = 0;
+    info.flags &= ~0x2;
+
+    pw_eeprom_reliable_write(
+        PW_EEPROM_ADDR_IDENTITY_DATA_1,
+        PW_EEPROM_ADDR_IDENTITY_DATA_2,
+        (uint8_t*)(&info),
+        PW_EEPROM_SIZE_IDENTITY_DATA_1
+    );
+
+
+    pw_eeprom_set_area(PW_EEPROM_ADDR_CAUGHT_POKEMON_SUMMARY, 0, 0x64);
+    pw_eeprom_set_area(PW_EEPROM_ADDR_EVENT_LOG, 0, PW_EEPROM_SIZE_EVENT_LOG);
+    pw_eeprom_set_area(PW_EEPROM_ADDR_RECEIVED_BITFIELD, 0, 0x6c8);
+    pw_eeprom_set_area(PW_EEPROM_ADDR_MET_PEER_DATA, 0, 0x1568);
+    pw_eeprom_set_area(PW_EEPROM_ADDR_ROUTE_INFO, 0, 0x10);
+
 }
 
+
+void pw_ir_start_walk() {
+
+    // use decompression buffer as copy buffer
+    uint8_t *buf = decompression_buffer;
+
+    buf[0] = 0xa5;
+    pw_eeprom_reliable_write(
+        PW_EEPROM_ADDR_COPY_MARKER_1,
+        PW_EEPROM_ADDR_COPY_MARKER_2,
+        buf,
+        1
+    );
+
+    for(size_t i = 0; i < 0x2900; i+=DECOMPRESSION_BUFFER_SIZE) {
+        pw_eeprom_read(0xd700+i, buf, DECOMPRESSION_BUFFER_SIZE);
+        pw_eeprom_write(0x8f00+i, buf, DECOMPRESSION_BUFFER_SIZE);
+    }
+
+    for(size_t i = 0; i < 0x280; i+=128) {
+        pw_eeprom_read(0xd480+i, buf, 128);
+        pw_eeprom_read(0xcc00+i, buf, 128);
+    }
+
+    buf[0] = 0x00;
+    pw_eeprom_reliable_write(
+        PW_EEPROM_ADDR_COPY_MARKER_1,
+        PW_EEPROM_ADDR_COPY_MARKER_2,
+        buf,
+        1
+    );
+
+
+    pw_eeprom_set_area(PW_EEPROM_ADDR_EVENT_LOG, 0, PW_EEPROM_SIZE_EVENT_LOG);
+    pw_eeprom_set_area(PW_EEPROM_ADDR_MET_PEER_DATA, 0, 0x1568);
+    pw_eeprom_set_area(PW_EEPROM_ADDR_CAUGHT_POKEMON_SUMMARY, 0, 0x64);
+
+    walker_info_t *info = (walker_info_t*)decompression_buffer;
+
+    pw_eeprom_reliable_read(
+        PW_EEPROM_ADDR_IDENTITY_DATA_1,
+        PW_EEPROM_ADDR_IDENTITY_DATA_2,
+        (uint8_t*)(info),
+        PW_EEPROM_SIZE_IDENTITY_DATA_1
+    );
+
+    info->le_unk0 = 1;
+    info->le_unk1 = 1;
+    info->le_unk0 = 7;
+    info->le_unk3 = 7;
+    info->flags |= 0x2;
+
+    pw_eeprom_reliable_write(
+        PW_EEPROM_ADDR_IDENTITY_DATA_1,
+        PW_EEPROM_ADDR_IDENTITY_DATA_2,
+        (uint8_t*)(info),
+        PW_EEPROM_SIZE_IDENTITY_DATA_1
+    );
+
+    // make walk start event
+
+}

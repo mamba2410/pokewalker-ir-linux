@@ -45,4 +45,7 @@ ir_err_t pw_action_read_large_raw_data_from_eeprom(uint16_t src, uint16_t dst, s
 ir_err_t pw_action_send_large_raw_data_from_pointer(uint8_t *src, uint16_t dst, size_t final_write_size,
         size_t write_size, uint8_t *pcounter, uint8_t *packet, size_t max_len);
 
+void pw_ir_end_walk();
+ir_err_t pw_ir_eeprom_do_write(uint8_t *packet, size_t len);
+
 #endif /* PW_IR_ACTIONS_H */

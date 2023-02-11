@@ -10,4 +10,6 @@ tags
 *.bin
 *.hex
 *.s
+*.bak
+*.log
 pw-ir
