@@ -45,11 +45,13 @@ void pw_eeprom_raw_set_area(uint16_t addr, uint8_t v, size_t len) {
 
 void pw_eeprom_raw_deinit() {
 
-    FILE *fh = fopen("./eeprom.bin", "rb");
+    FILE *fh = fopen("./eeprom.bin", "wb");
     if(!fh) {
         printf("Error: cannot open eeprom file for reading.\n");
         return;
     }
+
+    printf("Writing eeprom back to disk\n");
 
     fwrite(eeprom, 1, EEPROM_SIZE, fh);
 
