@@ -19,6 +19,29 @@ static uint64_t td_us(struct timeval end, struct timeval start) {
     return (end.tv_sec - start.tv_sec)*1000000 + (end.tv_usec - start.tv_usec);
 }
 
+/*
+ *  Read from IR
+ *  Wait for 500ms, or until RX has something to read.
+ *  Read bytes until 3.748ms since the last read byte.
+ *
+ *  1 byte @115200 ~= 90us read.
+ *  136 bytes @115200 ~= 11.8ms read.
+ *
+ *  I get ~1us/iteration, but `read()` only ever returns
+ *  bytes on the first call, or until ~50ms later, by
+ *  which time the peer has timed out.
+ *
+ *  Only a problem with large, consecutive packets.
+ *  It's also unreliable, sometimes I can read a packet
+ *  over 100 bytes long, then the next packet stops reading
+ *  at ~30 bytes in.
+ *
+ *  Testing with an IrDA 3-click board -> ftdi2232h over usb.
+ *
+ *  For a log of comms, see `walk_start.log`
+ *  Also see `pw_ir_init()` for serial setup.
+ *
+ */
 int pw_ir_read(uint8_t *buf, size_t max_len) {
 
     struct timeval start, now, read_start, last_rx;
@@ -28,6 +51,7 @@ int pw_ir_read(uint8_t *buf, size_t max_len) {
 
     gettimeofday(&start, NULL);
 
+    // wait til we have bytes in the rx buffer
     do {
         ioctl(ir_fd, FIONREAD, &bytes_available);
         gettimeofday(&now, NULL);
@@ -35,6 +59,7 @@ int pw_ir_read(uint8_t *buf, size_t max_len) {
     } while( (bytes_available <= 0) && !timeout  );
 
 
+    // start read
     gettimeofday(&read_start, NULL);
     do {
         ioctl(ir_fd, FIONREAD, &bytes_available);
@@ -51,7 +76,7 @@ int pw_ir_read(uint8_t *buf, size_t max_len) {
     t = td_us(now, start);
 
 #ifdef DRIVER_IR_DEBUG_READ
-    printf("\tread: (%lu us)", t);
+    printf("\tread %d bytes: (%lu us)", total_read, t);
     for(size_t i = 0; i < total_read; i++) {
         if(i%8 == 0) printf(" ");
         if(i%16 == 0) printf("\n\t\t");
@@ -131,8 +156,9 @@ int pw_ir_init() {
     // i.e. timeout 200ms after start of read
     // NOTE: behaviour needs testing, I don't know if it will break after the first byte or if it will
     // break if the timer runs out while there is still data incoming
-    tty.c_cc[VTIME] = 2;    // max time between bytes = 200ms
+    tty.c_cc[VTIME] = 1;    // max time between bytes = 100ms
     tty.c_cc[VMIN] = 0;     // min number of bytes per read is 0
+    // 100ms is way too long to wait for last byte
 
     cfsetispeed(&tty, B115200);
     cfsetospeed(&tty, B115200);
