@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #include <sys/fcntl.h>
 #include <sys/ioctl.h>
@@ -8,31 +9,46 @@
 #include <unistd.h>
 
 #include <sys/time.h>
+#include <sys/select.h>
 
 #include "driver_ir.h"
 
 static int ir_fd;
 
+static uint64_t td_us(struct timeval end, struct timeval start) {
+    return (end.tv_sec - start.tv_sec)*1000000 + (end.tv_usec - start.tv_usec);
+}
+
 int pw_ir_read(uint8_t *buf, size_t max_len) {
 
-    struct timeval start, now;
+    struct timeval start, now, read_start, last_rx;
     int bytes_available, total_read = 0;
     uint64_t t;
+    bool timeout = false;
 
     gettimeofday(&start, NULL);
 
     do {
         ioctl(ir_fd, FIONREAD, &bytes_available);
         gettimeofday(&now, NULL);
-        t = (now.tv_sec - start.tv_sec)*1000000 + (now.tv_usec - start.tv_usec);
-    } while( (bytes_available <= 0) && ( t < 500*1000) );
+        timeout = td_us(now, start) >= 500*1000;
+    } while( (bytes_available <= 0) && !timeout  );
 
-    if(bytes_available > 0) {
-        total_read = read(ir_fd, buf, max_len);
+
+    gettimeofday(&read_start, NULL);
+    do {
+        ioctl(ir_fd, FIONREAD, &bytes_available);
+        if(bytes_available > 0) {
+            total_read = read(ir_fd, buf, max_len);
+            gettimeofday(&last_rx, NULL);
+        }
+
         gettimeofday(&now, NULL);
-        t = (now.tv_sec - start.tv_sec)*1000000 + (now.tv_usec - start.tv_usec);
+        t = td_us(now, last_rx);
+    } while( t < 3748 );
 
-    }
+    gettimeofday(&now, NULL);
+    t = td_us(now, start);
 
 #ifdef DRIVER_IR_DEBUG_READ
     printf("\tread: (%lu us)", t);
@@ -56,7 +72,7 @@ int pw_ir_write(uint8_t *buf, size_t len) {
     uint64_t t = (now.tv_sec - start.tv_sec)*1000000 + (now.tv_usec - start.tv_usec);
 
 #ifdef DRIVER_IR_DEBUG_WRITE
-    printf("\twrite: (%lu us)", t);
+    printf("\twrite %lu bytes: (%lu us)", len, t);
     for(size_t i = 0; i < len; i++) {
         if(i%8 == 0) printf(" ");
         if(i%16 == 0) printf("\n\t\t");

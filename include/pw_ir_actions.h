@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include "pw_ir.h"
+#include "trainer_info.h"
 
 #define DECOMPRESSION_BUFFER_SIZE   256
 
@@ -47,5 +48,6 @@ ir_err_t pw_action_send_large_raw_data_from_pointer(uint8_t *src, uint16_t dst, 
 
 void pw_ir_end_walk();
 ir_err_t pw_ir_eeprom_do_write(uint8_t *packet, size_t len);
+void pw_log_event(event_log_item_t event_item);
 
 #endif /* PW_IR_ACTIONS_H */

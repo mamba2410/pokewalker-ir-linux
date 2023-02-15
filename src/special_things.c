@@ -236,7 +236,8 @@ ir_err_t dump_64k_rom(const char* fname) {
 
     uint8_t packet[11];
 
-    size_t step = 56; // 64-byte serial buffer :(
+    //size_t step = 56; // 64-byte serial buffer :(
+    size_t step = 128;
     size_t read_size = 64*1024;
 
     for(size_t i = 0; i < read_size; i+=step) {

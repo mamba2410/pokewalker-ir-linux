@@ -63,14 +63,15 @@ ir_err_t pw_ir_recv_packet(uint8_t *packet, size_t len, size_t *pn_read) {
     if(n_read <= 0) return IR_ERR_TIMEOUT;
     *pn_read = (size_t)n_read;
 
+    //printf("n_read: %lu\n", *pn_read);
     for(int i = 0; i < n_read; i++)
         packet[i] ^= 0xaa;
 
-    if(n_read != len) return IR_ERR_SIZE_MISMATCH;
+    if(n_read != len && len < MAX_PACKET_SIZE) return IR_ERR_SIZE_MISMATCH;
 
     // packet chk LE
     uint16_t packet_chk = (((uint16_t)packet[3])<<8) + ((uint16_t)packet[2]);
-    uint16_t chk = pw_ir_checksum(packet, len);
+    uint16_t chk = pw_ir_checksum(packet, *pn_read);
 
     if(packet_chk != chk) return IR_ERR_BAD_CHECKSUM;
 

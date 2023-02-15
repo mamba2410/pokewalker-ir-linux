@@ -127,6 +127,48 @@ typedef struct {
     uint8_t special_route: 1;
 } special_inventory_t;
 
+typedef struct {
+    /* +0x00 */ pokemon_summary_t pokemon_summary;
+    /* +0x10 */ uint16_t pokemon_nickname[11];
+    /* +0x26 */ uint8_t pokemon_happiness;
+    /* +0x27 */ uint8_t route_image_index;
+    /* +0x28 */ uint16_t route_name[21];
+    /* +0x52 */ pokemon_summary_t route_pokemon[3];
+    /* +0x82 */ uint16_t le_route_pokemon_steps[3];
+    /* +0x88 */ uint8_t route_pokemon_percent[3];
+    /* +0x8b */ uint8_t padding;
+    /* +0x8c */ uint16_t le_route_items[10];
+    /* +0xa0 */ uint16_t le_route_item_steps[10];
+    /* +0xb4 */ uint8_t route_item_percent[10];
+} route_info_t;
+
+
+/*
+ *  size: 0x5e = 94 bytes
+ *  dmitry: struct EventLogItem
+ */
+typedef struct __attribute__((__packed__)) {
+    /* 0x00 */ uint32_t be_time;
+    /* 0x04 */ uint32_t le_unk0;
+    /* 0x08 */ uint16_t le_unk2;
+    /* 0x0a */ uint16_t le_our_species;
+    /* 0x0c */ uint16_t le_other_species;
+    /* 0x0e */ uint16_t le_extra;
+    /* 0x10 */ uint16_t other_trainer_name[8];
+    /* 0x20 */ uint16_t our_pokemon_name[11];
+    /* 0x36 */ uint16_t other_pokemon_name[11];
+    /* 0x4c */ uint8_t  route_image_index;
+    /* 0x4d */ uint8_t  pokemon_friendship;
+    /* 0x4e */ uint16_t be_our_watts;
+    /* 0x50 */ uint16_t be_other_watts;
+    /* 0x52 */ uint32_t be_steps;
+    /* 0x56 */ uint32_t be_other_steps;
+    /* 0x5a */ uint8_t  event_type;
+    /* 0x5b */ uint8_t  our_pokemon_flags;
+    /* 0x5c */ uint8_t  other_pokemon_flags;
+    /* 0x5d */ uint8_t  padding;
+} event_log_item_t;
+
 
 
 #endif /* PW_TRAINER_INFO_H */

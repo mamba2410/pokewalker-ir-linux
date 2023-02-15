@@ -152,7 +152,7 @@ ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len) {
                 return IR_ERR_GENERAL;
             }
 
-            pw_ir_delay_ms(5);
+            pw_ir_delay_ms(3);
 
             err = pw_ir_send_packet(packet, 8+PW_EEPROM_SIZE_IDENTITY_DATA_1, &n_rw);
 
@@ -164,7 +164,7 @@ ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len) {
 
             //TODO: set the rtc, that's it
 
-            pw_ir_delay_ms(5);
+            pw_ir_delay_ms(3);
 
             err = pw_ir_send_packet(packet, 8, &n_rw);
 
@@ -176,7 +176,7 @@ ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len) {
 
             //TODO: set the rtc, that's it
 
-            pw_ir_delay_ms(5);
+            pw_ir_delay_ms(3);
 
             err = pw_ir_send_packet(packet, 8, &n_rw);
 
@@ -188,7 +188,7 @@ ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len) {
 
             //TODO: set the rtc, that's it
 
-            pw_ir_delay_ms(5);
+            pw_ir_delay_ms(3);
 
             err = pw_ir_send_packet(packet, 8, &n_rw);
 
@@ -200,6 +200,12 @@ ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len) {
         case CMD_EEPROM_WRITE_CMP_80:
         case CMD_EEPROM_WRITE_RAW_80: {
             pw_ir_eeprom_do_write(packet, len);
+            err = IR_OK;
+
+            pw_ir_delay_ms(3);
+            packet[0] = CMD_EEPROM_WRITE_ACK;
+            packet[1] = EXTRA_BYTE_FROM_WALKER;
+            pw_ir_send_packet(packet, 8, &n_rw);
             break;
         }
         case CMD_EEPROM_READ_REQ: {
@@ -210,7 +216,7 @@ ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len) {
             packet[1] = EXTRA_BYTE_FROM_WALKER;
             pw_eeprom_read(addr, packet+8, len);
 
-            pw_ir_delay_ms(5);
+            pw_ir_delay_ms(3);
 
             err = pw_ir_send_packet(packet, 8+len, &n_rw);
             break;
@@ -219,7 +225,7 @@ ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len) {
             packet[0] = CMD_PONG;
             packet[1] = EXTRA_BYTE_FROM_WALKER;
 
-            pw_ir_delay_ms(5);
+            pw_ir_delay_ms(3);
 
             err = pw_ir_send_packet(packet, 8, &n_rw);
             break;
@@ -227,7 +233,7 @@ ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len) {
         case CMD_CONNECT_COMPLETE: {
             packet[0] = CMD_CONNECT_COMPLETE_ACK;
             packet[1] = EXTRA_BYTE_FROM_WALKER;
-            pw_ir_delay_ms(5);
+            pw_ir_delay_ms(3);
 
             err = pw_ir_send_packet(packet, 8, &n_rw);
             break;
@@ -235,14 +241,14 @@ ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len) {
         case 0x40: {
             packet[0] = 0x42;
             packet[1] = EXTRA_BYTE_FROM_WALKER;
-            pw_ir_delay_ms(5);
+            pw_ir_delay_ms(3);
             err = pw_ir_send_packet(packet, 8, &n_rw);
             break;
         }
         case CMD_WALK_END_REQ: {
             packet[0] = CMD_WALK_END_ACK;
             packet[1] = EXTRA_BYTE_FROM_WALKER;
-            pw_ir_delay_ms(5);
+            pw_ir_delay_ms(3);
             err = pw_ir_send_packet(packet, 8, &n_rw);
 
             pw_ir_end_walk();
@@ -253,7 +259,7 @@ ir_err_t pw_action_slave_perform_request(uint8_t *packet, size_t len) {
         case CMD_WALK_START: {
             packet[0] = CMD_WALK_START;
             packet[1] = EXTRA_BYTE_FROM_WALKER;
-            pw_ir_delay_ms(5);
+            pw_ir_delay_ms(3);
             err = pw_ir_send_packet(packet, 8, &n_rw);
             break;
         }
@@ -649,7 +655,7 @@ ir_err_t pw_ir_eeprom_do_write(uint8_t *packet, size_t len) {
     uint8_t cmd = packet[0];
     uint16_t addr = (packet[1]<<8) | (cmd&0x80);
 
-    if(cmd & 0x02) {
+    if(!(cmd & 0x02)) {
         // decompress
         decompress_data(packet+8, decompression_buffer, len-8);
         data = decompression_buffer;
@@ -752,7 +758,29 @@ void pw_ir_start_walk() {
         (uint8_t*)(info),
         PW_EEPROM_SIZE_IDENTITY_DATA_1
     );
+    info = 0;
 
     // make walk start event
 
+
+    route_info_t *route_info = (route_info_t*)decompression_buffer;
+    event_log_item_t event_item = {0,};
+
+    pw_eeprom_read(PW_EEPROM_ADDR_ROUTE_INFO, (uint8_t*)route_info, PW_EEPROM_SIZE_ROUTE_INFO);
+
+    event_item.le_our_species = route_info->pokemon_summary.le_species;
+
+    for(size_t i = 0; i < 11; i++)
+        event_item.our_pokemon_name[i] = route_info->pokemon_nickname[i];
+
+    event_item.route_image_index = route_info->route_image_index;
+    event_item.event_type = 0x19;
+
+    pw_log_event(event_item);
+
+
+}
+
+void pw_log_event(event_log_item_t event_item) {
+    pw_eeprom_write(PW_EEPROM_ADDR_EVENT_LOG, (uint8_t*)(&event_item), sizeof(event_item));
 }

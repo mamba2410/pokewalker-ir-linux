@@ -37,7 +37,7 @@ void pw_comms_event_loop() {
             err = pw_ir_recv_packet(rx_buf, PW_RX_BUF_LEN, &n_read);
             if(err == IR_OK || err == IR_ERR_SIZE_MISMATCH) {
 
-                err = pw_action_slave_perform_request(rx_buf, PW_TX_BUF_LEN);
+                err = pw_action_slave_perform_request(rx_buf, n_read);
             }
             break;
         }
@@ -47,7 +47,7 @@ void pw_comms_event_loop() {
             }
             //printf("We are master\n");
 
-            //err = pw_action_peer_play(&g_comm_substate, &g_comm_loop_counter, rx_buf, PW_RX_BUF_LEN);
+            err = pw_action_peer_play(&g_comm_substate, &g_comm_loop_counter, rx_buf, PW_RX_BUF_LEN);
             break;
         }
         case COMM_STATE_DISCONNECTED: return;

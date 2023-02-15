@@ -347,9 +347,11 @@ int main(int argc, char** argv){
         do {
             pw_comms_event_loop();
         } while( (cs=pw_ir_get_comm_state()) != COMM_STATE_MASTER );
+        printf("We are master\n");
 
         // pokemon_summary, special_data, sprite, pokemon_name, item id, item_name
         //send_event_data(gift_files[0],gift_files[1], gift_files[2]);
+        send_custom_event_pokemon(gift_files[0],gift_files[1], gift_files[2]);
 
         printf("Done!\n");
         exit_ok();
