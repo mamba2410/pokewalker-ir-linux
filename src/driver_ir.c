@@ -117,7 +117,7 @@ int pw_ir_clear_rx() {
 
 int pw_ir_init() {
     const char fname[] = "/dev/ttyUSB1";
-    ir_fd = open(fname, O_RDWR);
+    ir_fd = open(fname, O_RDWR | O_NONBLOCK);
     if(ir_fd <= 0) {
         //sprintf(stderr, "Error: cannot open %s for serial.\n", fname);
         printf("Error: cannot open %s for serial.\n", fname);
@@ -156,7 +156,7 @@ int pw_ir_init() {
     // i.e. timeout 200ms after start of read
     // NOTE: behaviour needs testing, I don't know if it will break after the first byte or if it will
     // break if the timer runs out while there is still data incoming
-    tty.c_cc[VTIME] = 1;    // max time between bytes = 100ms
+    tty.c_cc[VTIME] = 0;    // max time between bytes = 100ms
     tty.c_cc[VMIN] = 0;     // min number of bytes per read is 0
     // 100ms is way too long to wait for last byte
 
