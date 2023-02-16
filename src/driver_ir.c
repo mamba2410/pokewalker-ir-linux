@@ -44,7 +44,7 @@ static uint64_t td_us(struct timeval end, struct timeval start) {
  */
 int pw_ir_read(uint8_t *buf, size_t max_len) {
 
-    struct timeval start, now, read_start, last_rx;
+    struct timeval start, now, read_start, last_rx, tmp;
     int bytes_available, total_read = 0;
     uint64_t t;
     bool timeout = false;
@@ -64,8 +64,10 @@ int pw_ir_read(uint8_t *buf, size_t max_len) {
     do {
         ioctl(ir_fd, FIONREAD, &bytes_available);
         if(bytes_available > 0) {
+            gettimeofday(&tmp, NULL);
             total_read = read(ir_fd, buf, max_len);
             gettimeofday(&last_rx, NULL);
+            printf("Read took %lu us\n", td_us(last_rx, tmp));
         }
 
         gettimeofday(&now, NULL);
